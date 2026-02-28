@@ -7,7 +7,11 @@
 
 static bool cpu_scalar_fp_supported(const hwb_context* ctx) {
   (void)ctx;
+#ifdef __FMA__
   return true;
+#else
+  return false;
+#endif
 }
 
 static int cpu_scalar_fp_run(const hwb_context* ctx, hwb_benchmark_result* out) {
@@ -28,9 +32,9 @@ static int cpu_scalar_fp_run(const hwb_context* ctx, hwb_benchmark_result* out) 
   double warmup_start = hwb_now_seconds();
   while ((hwb_now_seconds() - warmup_start) * 1000.0 < (double)ctx->warmup_ms) {
     for (unsigned long long i = 0; i < iters / 8; ++i) {
-      a = fma(a, b, c);
-      b = fma(b, c, a);
-      c = fma(c, a, b);
+      a = __builtin_fma(a, b, c);
+      b = __builtin_fma(b, c, a);
+      c = __builtin_fma(c, a, b);
     }
   }
   out->warmup_ms = (hwb_now_seconds() - warmup_start) * 1000.0;
@@ -39,9 +43,9 @@ static int cpu_scalar_fp_run(const hwb_context* ctx, hwb_benchmark_result* out) 
   for (int s = 0; s < ctx->samples && s < HWB_MAX_SAMPLES; ++s) {
     double t0 = hwb_now_seconds();
     for (unsigned long long i = 0; i < iters; ++i) {
-      a = fma(a, b, c);
-      b = fma(b, c, a);
-      c = fma(c, a, b);
+      a = __builtin_fma(a, b, c);
+      b = __builtin_fma(b, c, a);
+      c = __builtin_fma(c, a, b);
     }
     double t1 = hwb_now_seconds();
 

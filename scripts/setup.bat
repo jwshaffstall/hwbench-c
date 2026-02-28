@@ -10,8 +10,8 @@ if "%HWB_PRESET%"=="" (
   )
 )
 
-for /f "delims=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_" %%A in ("%HWB_PRESET%") do (
-    echo Error: Invalid HWB_PRESET value "%HWB_PRESET%".
+set HWB_PRESET | findstr /R /C:"^HWB_PRESET=[A-Za-z0-9_-][A-Za-z0-9_-]*$" >nul || (
+    echo Error: Invalid HWB_PRESET value. Use only letters, digits, '-' and '_'.
     exit /b 1
 )
 

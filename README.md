@@ -33,6 +33,16 @@ ctest --preset linux-gcc-release
 ./build/linux-gcc-release/hwbench-c --list
 ```
 
+## Continuous Integration
+
+GitHub Actions workflows are provided per platform:
+
+- `.github/workflows/linux.yml`
+- `.github/workflows/macos.yml`
+- `.github/workflows/windows.yml`
+
+Each workflow configures, builds, and runs tests for its target OS.
+
 ## Example output
 
 ```bash

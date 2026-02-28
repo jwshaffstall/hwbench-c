@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
+#include <stdint.h>
 
 #if defined(_WIN32)
   #include <windows.h>
@@ -61,37 +63,113 @@ const char* hwb_arch_name(void) {
 }
 
 #if defined(__linux__)
-static void detect_linux_cpu(hwb_hardware_info* out) {
-  FILE* f = fopen("/proc/cpuinfo", "r");
-  if (!f) return;
 
+/* A (physical_id, core_id) pair used to count unique physical cores. */
+typedef struct {
+  int phys;
+  int core;
+} HwbCorePair;
+
+enum { HWB_INITIAL_CORE_PAIR_CAPACITY = 64 };
+
+static int hwb_pair_seen(const HwbCorePair* pairs, int count, int phys, int core) {
+  for (int i = 0; i < count; ++i) {
+    if (pairs[i].phys == phys && pairs[i].core == core) return 1;
+  }
+  return 0;
+}
+
+static int hwb_add_pair(HwbCorePair** pairs, int* pair_count, int* pair_cap, int phys, int core) {
+  if (hwb_pair_seen(*pairs, *pair_count, phys, core)) return 0;
+  if (*pair_count == *pair_cap) {
+    size_t grown_cap = *pair_cap > 0 ? ((size_t)(*pair_cap) * 2U) : (size_t)HWB_INITIAL_CORE_PAIR_CAPACITY;
+    if (grown_cap > (SIZE_MAX / sizeof(HwbCorePair)) || grown_cap > (size_t)INT_MAX) return -1;
+    int new_cap = (int)grown_cap;
+    HwbCorePair* grown = (HwbCorePair*)realloc(*pairs, (size_t)new_cap * sizeof(HwbCorePair));
+    if (!grown) {
+      return -1;
+    }
+    *pairs = grown;
+    *pair_cap = new_cap;
+  }
+  (*pairs)[*pair_count].phys = phys;
+  (*pairs)[*pair_count].core = core;
+  ++(*pair_count);
+  return 0;
+}
+
+static void hwb_disable_pair_tracking(HwbCorePair** pairs, int* pair_count, int* pair_cap, int* can_track_pairs) {
+  if (pairs && *pairs) {
+    free(*pairs);
+    *pairs = NULL;
+  }
+  if (pair_count) *pair_count = 0;
+  if (pair_cap) *pair_cap = 0;
+  if (can_track_pairs) *can_track_pairs = 0;
+}
+
+int hwb_parse_linux_cpuinfo_stream(FILE* f, char* cpu_model, size_t cpu_model_size, int* logical_cores, int* physical_cores) {
+  if (!f || !logical_cores || !physical_cores) return -1;
+
+  HwbCorePair* pairs = NULL;
+  int pair_count = 0;
+  int pair_cap = 0;
+  int can_track_pairs = 1;
   char line[512];
   int logical = 0;
-  int physical = 0;
+  int cur_phys = -1;
+  int cur_core = -1;
+
   while (fgets(line, sizeof(line), f)) {
-    if (strncmp(line, "model name", 10) == 0 && out->cpu_model[0] == '\0') {
+    if (strncmp(line, "model name", 10) == 0 && cpu_model && cpu_model_size > 0 && cpu_model[0] == '\0') {
       char* p = strchr(line, ':');
       if (p) {
         p += 1;
         while (*p == ' ' || *p == '\t') ++p;
         hwb_trim_newline(p);
-        hwb_copy_string(out->cpu_model, sizeof(out->cpu_model), p);
+        hwb_copy_string(cpu_model, cpu_model_size, p);
       }
     } else if (strncmp(line, "processor", 9) == 0) {
-      logical++;
-    } else if (strncmp(line, "cpu cores", 9) == 0 && physical == 0) {
-      char* p = strchr(line, ':');
-      if (p) {
-        physical = atoi(p + 1);
+      if (can_track_pairs && cur_phys >= 0 && cur_core >= 0) {
+        if (hwb_add_pair(&pairs, &pair_count, &pair_cap, cur_phys, cur_core) != 0) {
+          hwb_disable_pair_tracking(&pairs, &pair_count, &pair_cap, &can_track_pairs);
+        }
       }
+      cur_phys = -1;
+      cur_core = -1;
+      logical++;
+    } else if (strncmp(line, "physical id", 11) == 0) {
+      char* p = strchr(line, ':');
+      if (p) cur_phys = atoi(p + 1);
+    } else if (strncmp(line, "core id", 7) == 0) {
+      char* p = strchr(line, ':');
+      if (p) cur_core = atoi(p + 1);
     }
   }
-  fclose(f);
 
-  out->logical_cores = logical > 0 ? logical : out->logical_cores;
-  if (physical > 0) {
-    out->physical_cores = physical;
+  if (can_track_pairs && cur_phys >= 0 && cur_core >= 0) {
+    if (hwb_add_pair(&pairs, &pair_count, &pair_cap, cur_phys, cur_core) != 0) {
+      hwb_disable_pair_tracking(&pairs, &pair_count, &pair_cap, &can_track_pairs);
+    }
   }
+
+  *logical_cores = logical;
+  *physical_cores = (can_track_pairs && pair_count > 0) ? pair_count : 0;
+  free(pairs);
+  return 0;
+}
+
+static void detect_linux_cpu(hwb_hardware_info* out) {
+  FILE* f = fopen("/proc/cpuinfo", "r");
+  if (!f) return;
+
+  int logical = 0;
+  int physical = 0;
+  if (hwb_parse_linux_cpuinfo_stream(f, out->cpu_model, sizeof(out->cpu_model), &logical, &physical) == 0) {
+    if (logical > 0) out->logical_cores = logical;
+    if (physical > 0) out->physical_cores = physical;
+  }
+  fclose(f);
 }
 
 static void detect_linux_memory(hwb_hardware_info* out) {

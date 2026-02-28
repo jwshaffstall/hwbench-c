@@ -61,6 +61,7 @@ if(HWB_BUILD_TESTS)
     tests/unit/test_stats.c
     tests/unit/test_registry.c
     tests/unit/test_system.c
+    tests/unit/test_system_linux_parse.c
   )
   target_link_libraries(hwbench-tests PRIVATE hwbench_core hwbench_benches)
   add_test(NAME hwbench-tests COMMAND hwbench-tests)

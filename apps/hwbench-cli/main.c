@@ -90,7 +90,13 @@ int main(int argc, char** argv) {
       free(results);
       return 2;
     }
-    if (hwb_run_benchmark(&ctx, b, &results[result_count]) != 0) {
+    int rc = hwb_run_benchmark(&ctx, b, &results[result_count]);
+    if (rc == -2) {
+      printf("Benchmark unsupported: %s\n", bench_id);
+      free(results);
+      return 0;
+    }
+    if (rc != 0) {
       fprintf(stderr, "Benchmark failed: %s\n", bench_id);
       free(results);
       return 3;

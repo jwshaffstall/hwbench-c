@@ -2,9 +2,9 @@
 #include <stdio.h>
 #include <string.h>
 
-#if defined(__linux__)
-int hwb_parse_linux_cpuinfo_stream(FILE* f, char* cpu_model, size_t cpu_model_size, int* logical_cores, int* physical_cores);
+#include "hwbench/system_internal.h"
 
+#if defined(__linux__)
 static int run_parse_case(const char* cpuinfo, const char* expected_model, int expected_logical, int expected_physical) {
   size_t len = strlen(cpuinfo);
   FILE* f = fmemopen((void*)cpuinfo, len, "r");

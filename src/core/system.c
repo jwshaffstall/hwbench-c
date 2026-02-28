@@ -61,13 +61,39 @@ const char* hwb_arch_name(void) {
 }
 
 #if defined(__linux__)
+
+/* A (physical_id, core_id) pair used to count unique physical cores. */
+typedef struct {
+  int phys;
+  int core;
+} HwbCorePair;
+
+static int hwb_pair_seen(const HwbCorePair* pairs, int count, int phys, int core) {
+  for (int i = 0; i < count; ++i) {
+    if (pairs[i].phys == phys && pairs[i].core == core) return 1;
+  }
+  return 0;
+}
+
 static void detect_linux_cpu(hwb_hardware_info* out) {
   FILE* f = fopen("/proc/cpuinfo", "r");
   if (!f) return;
 
+  /* Allocate storage for unique (physical_id, core_id) pairs.
+   * 4096 is well above any real-world CPU count. */
+  const int max_pairs = 4096;
+  HwbCorePair* pairs = (HwbCorePair*)malloc((size_t)max_pairs * sizeof(HwbCorePair));
+  if (!pairs) {
+    fclose(f);
+    return;
+  }
+  int pair_count = 0;
+
   char line[512];
   int logical = 0;
-  int physical = 0;
+  int cur_phys = -1;
+  int cur_core = -1;
+
   while (fgets(line, sizeof(line), f)) {
     if (strncmp(line, "model name", 10) == 0 && out->cpu_model[0] == '\0') {
       char* p = strchr(line, ':');
@@ -78,20 +104,42 @@ static void detect_linux_cpu(hwb_hardware_info* out) {
         hwb_copy_string(out->cpu_model, sizeof(out->cpu_model), p);
       }
     } else if (strncmp(line, "processor", 9) == 0) {
-      logical++;
-    } else if (strncmp(line, "cpu cores", 9) == 0 && physical == 0) {
-      char* p = strchr(line, ':');
-      if (p) {
-        physical = atoi(p + 1);
+      /* Finalize the previous processor block's pair before starting a new one. */
+      if (cur_phys >= 0 && cur_core >= 0 && pair_count < max_pairs) {
+        if (!hwb_pair_seen(pairs, pair_count, cur_phys, cur_core)) {
+          pairs[pair_count].phys = cur_phys;
+          pairs[pair_count].core = cur_core;
+          ++pair_count;
+        }
       }
+      cur_phys = -1;
+      cur_core = -1;
+      logical++;
+    } else if (strncmp(line, "physical id", 11) == 0) {
+      char* p = strchr(line, ':');
+      if (p) cur_phys = atoi(p + 1);
+    } else if (strncmp(line, "core id", 7) == 0) {
+      char* p = strchr(line, ':');
+      if (p) cur_core = atoi(p + 1);
     }
   }
+
+  /* Finalize the last processor block's pair. */
+  if (cur_phys >= 0 && cur_core >= 0 && pair_count < max_pairs) {
+    if (!hwb_pair_seen(pairs, pair_count, cur_phys, cur_core)) {
+      pairs[pair_count].phys = cur_phys;
+      pairs[pair_count].core = cur_core;
+      ++pair_count;
+    }
+  }
+
   fclose(f);
 
   out->logical_cores = logical > 0 ? logical : out->logical_cores;
-  if (physical > 0) {
-    out->physical_cores = physical;
+  if (pair_count > 0) {
+    out->physical_cores = pair_count;
   }
+  free(pairs);
 }
 
 static void detect_linux_memory(hwb_hardware_info* out) {

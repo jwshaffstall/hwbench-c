@@ -55,6 +55,13 @@ static int memory_stream_copy_run(const hwb_context* ctx, hwb_benchmark_result* 
   }
   out->measured_ms = (hwb_now_seconds() - measured_start) * 1000.0;
 
+  /* Prevent dead-code elimination of the copy loops by making b observable. */
+  volatile double sink = 0.0;
+  for (size_t i = 0; i < n; ++i) {
+    sink += b[i];
+  }
+  (void)sink;
+
   free(a);
   free(b);
   return hwb_compute_stats(out->samples, out->sample_count, &out->summary);

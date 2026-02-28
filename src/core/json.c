@@ -4,13 +4,36 @@
 #include <stdio.h>
 #include <time.h>
 
-static void write_escaped(FILE* f, const char* s) {
-  for (; *s; ++s) {
-    if (*s == '"' || *s == '\\') {
-      fputc('\\', f);
-    }
-    fputc(*s, f);
+static void write_json_string(FILE* f, const char* s) {
+  static const char hex[] = "0123456789abcdef";
+  if (!s) {
+    fputs("null", f);
+    return;
   }
+
+  fputc('"', f);
+  for (; *s; ++s) {
+    unsigned char c = (unsigned char)*s;
+    switch (c) {
+      case '"': fputs("\\\"", f); break;
+      case '\\': fputs("\\\\", f); break;
+      case '\b': fputs("\\b", f); break;
+      case '\f': fputs("\\f", f); break;
+      case '\n': fputs("\\n", f); break;
+      case '\r': fputs("\\r", f); break;
+      case '\t': fputs("\\t", f); break;
+      default:
+        if (c < 0x20) {
+          fputs("\\u00", f);
+          fputc(hex[(c >> 4) & 0x0F], f);
+          fputc(hex[c & 0x0F], f);
+        } else {
+          fputc((int)c, f);
+        }
+        break;
+    }
+  }
+  fputc('"', f);
 }
 
 int hwb_write_json_results(const char* path,
@@ -35,21 +58,21 @@ int hwb_write_json_results(const char* path,
 
   fprintf(f, "{\n");
   fprintf(f, "  \"schema_version\": \"1.0\",\n");
-  fprintf(f, "  \"suite_version\": \""); write_escaped(f, suite_version); fprintf(f, "\",\n");
-  fprintf(f, "  \"run_id\": \""); write_escaped(f, run_id); fprintf(f, "\",\n");
+  fprintf(f, "  \"suite_version\": "); write_json_string(f, suite_version); fprintf(f, ",\n");
+  fprintf(f, "  \"run_id\": "); write_json_string(f, run_id); fprintf(f, ",\n");
   fprintf(f, "  \"timestamp_utc\": \"%s\",\n", ts);
-  fprintf(f, "  \"machine\": {\"arch\": \"%s\"},\n", hwb_arch_name());
-  fprintf(f, "  \"os\": {\"name\": \"%s\"},\n", hwb_os_name());
+  fprintf(f, "  \"machine\": {\"arch\": "); write_json_string(f, hwb_arch_name()); fprintf(f, "},\n");
+  fprintf(f, "  \"os\": {\"name\": "); write_json_string(f, hwb_os_name()); fprintf(f, "},\n");
   fprintf(f, "  \"benchmarks\": [\n");
 
   for (size_t i = 0; i < result_count; ++i) {
     const hwb_benchmark_result* r = &results[i];
     fprintf(f, "    {\n");
-    fprintf(f, "      \"id\": \"%s\",\n", r->id);
-    fprintf(f, "      \"category\": \"%s\",\n", r->category);
-    fprintf(f, "      \"variant\": \"%s\",\n", r->variant);
+    fprintf(f, "      \"id\": "); write_json_string(f, r->id); fprintf(f, ",\n");
+    fprintf(f, "      \"category\": "); write_json_string(f, r->category); fprintf(f, ",\n");
+    fprintf(f, "      \"variant\": "); write_json_string(f, r->variant); fprintf(f, ",\n");
     fprintf(f, "      \"threads\": %d,\n", r->threads);
-    fprintf(f, "      \"units\": \"%s\",\n", r->unit);
+    fprintf(f, "      \"units\": "); write_json_string(f, r->unit); fprintf(f, ",\n");
     fprintf(f, "      \"samples\": [");
     for (size_t j = 0; j < r->sample_count; ++j) {
       fprintf(f, "%s%.6f", j ? ", " : "", r->samples[j]);

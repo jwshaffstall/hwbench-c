@@ -234,7 +234,35 @@ static void detect_windows_cpu(hwb_hardware_info* out) {
   SYSTEM_INFO info;
   GetSystemInfo(&info);
   out->logical_cores = (int)info.dwNumberOfProcessors;
-  out->physical_cores = out->logical_cores;
+
+  /* Count physical cores; each RelationProcessorCore entry represents one core */
+  out->physical_cores = 0;
+  DWORD length = 0;
+  GetLogicalProcessorInformationEx(RelationProcessorCore, NULL, &length);
+  if (GetLastError() == ERROR_INSUFFICIENT_BUFFER && length > 0) {
+    SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX* buf =
+        (SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX*)malloc(length);
+    if (buf) {
+      if (GetLogicalProcessorInformationEx(RelationProcessorCore, buf, &length)) {
+        int physical = 0;
+        BYTE* ptr = (BYTE*)buf;
+        BYTE* end = ptr + length;
+        while (ptr < end) {
+          SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX* entry =
+              (SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX*)ptr;
+          if (entry->Relationship == RelationProcessorCore) {
+            ++physical;
+          }
+          ptr += entry->Size;
+        }
+        out->physical_cores = physical;
+      }
+      free(buf);
+    }
+  }
+  if (out->physical_cores < 1) {
+    out->physical_cores = out->logical_cores;
+  }
 }
 
 static void detect_windows_memory_storage(hwb_hardware_info* out) {

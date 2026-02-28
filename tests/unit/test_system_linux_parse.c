@@ -5,17 +5,12 @@
 int hwb_parse_linux_cpuinfo_stream(FILE* f, char* cpu_model, size_t cpu_model_size, int* logical_cores, int* physical_cores);
 
 static int run_parse_case(const char* cpuinfo, const char* expected_model, int expected_logical, int expected_physical) {
-  FILE* f = tmpfile();
+  size_t len = strlen(cpuinfo);
+  FILE* f = fmemopen((void*)cpuinfo, len, "r");
   if (!f) {
-    puts("tmpfile failed");
+    puts("fmemopen failed");
     return 1;
   }
-  if (fputs(cpuinfo, f) == EOF) {
-    puts("fputs failed");
-    fclose(f);
-    return 1;
-  }
-  rewind(f);
 
   char model[128] = {0};
   int logical = 0;

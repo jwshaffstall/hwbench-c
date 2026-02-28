@@ -1,6 +1,7 @@
 #include "hwbench/bench.h"
 #include "hwbench/benches.h"
 #include "hwbench/json.h"
+#include "hwbench/system.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -16,6 +17,21 @@ static void print_usage(void) {
        "  --min-sample-ms <ms>\n"
        "  --threads <n>\n"
        "  --out <path>");
+}
+
+
+static void print_hardware_report(void) {
+  hwb_hardware_info hw;
+  if (hwb_detect_hardware(&hw) != 0) {
+    return;
+  }
+
+  puts("HARDWARE");
+  printf("  CPU: %s\n", hw.cpu_model);
+  printf("  Cores: %d logical / %d physical\n", hw.logical_cores, hw.physical_cores);
+  printf("  Memory: %llu MB\n", hw.memory_total_mb);
+  printf("  Storage: %s (%llu GB total)\n", hw.storage_name, hw.storage_total_gb);
+  printf("  GPU: %s\n", hw.gpu_name);
 }
 
 int main(int argc, char** argv) {
@@ -92,6 +108,7 @@ int main(int argc, char** argv) {
     return 1;
   }
 
+  print_hardware_report();
   puts("BENCHMARK\tVARIANT\tTHREADS\tMEDIAN\tUNIT\tCV%");
   for (size_t i = 0; i < result_count; ++i) {
     hwb_benchmark_result* r = &results[i];

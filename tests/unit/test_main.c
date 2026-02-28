@@ -2,11 +2,13 @@
 
 int test_stats(void);
 int test_registry(void);
+int test_system(void);
 
 int main(void) {
   int failures = 0;
   failures += test_stats();
   failures += test_registry();
+  failures += test_system();
   if (failures == 0) {
     printf("all tests passed\n");
     return 0;

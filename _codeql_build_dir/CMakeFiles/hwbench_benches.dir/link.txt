@@ -1,2 +1,0 @@
-/usr/bin/ar qc libhwbench_benches.a CMakeFiles/hwbench_benches.dir/src/benches/cpu_scalar_int_add.c.o CMakeFiles/hwbench_benches.dir/src/benches/memory_stream_triad.c.o CMakeFiles/hwbench_benches.dir/src/benches/register.c.o
-/usr/bin/ranlib libhwbench_benches.a

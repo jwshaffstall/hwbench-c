@@ -1,2 +1,0 @@
-/usr/bin/ar qc libhwbench_core.a CMakeFiles/hwbench_core.dir/src/core/bench.c.o CMakeFiles/hwbench_core.dir/src/core/json.c.o CMakeFiles/hwbench_core.dir/src/core/stats.c.o CMakeFiles/hwbench_core.dir/src/core/timer.c.o CMakeFiles/hwbench_core.dir/src/core/system.c.o
-/usr/bin/ranlib libhwbench_core.a

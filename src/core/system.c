@@ -231,9 +231,14 @@ static void detect_windows_cpu(hwb_hardware_info* out) {
     hwb_copy_string(out->cpu_model, sizeof(out->cpu_model), ident);
   }
 
-  SYSTEM_INFO info;
-  GetSystemInfo(&info);
-  out->logical_cores = (int)info.dwNumberOfProcessors;
+  /* Use all processor groups for an accurate logical core count on >64-CPU systems */
+  DWORD logical = GetActiveProcessorCount(ALL_PROCESSOR_GROUPS);
+  if (logical == 0) {
+    SYSTEM_INFO info;
+    GetSystemInfo(&info);
+    logical = info.dwNumberOfProcessors;
+  }
+  out->logical_cores = (int)logical;
 
   /* Count physical cores; each RelationProcessorCore entry represents one core */
   out->physical_cores = 0;
@@ -250,6 +255,12 @@ static void detect_windows_cpu(hwb_hardware_info* out) {
         while (ptr < end) {
           SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX* entry =
               (SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX*)ptr;
+          /* Guard against corrupt/truncated entries to prevent infinite loops
+             or out-of-bounds reads */
+          if (entry->Size < sizeof(*entry) ||
+              (DWORD)(end - ptr) < entry->Size) {
+            break;
+          }
           if (entry->Relationship == RelationProcessorCore) {
             ++physical;
           }

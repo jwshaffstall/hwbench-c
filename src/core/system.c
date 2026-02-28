@@ -1,4 +1,5 @@
 #include "hwbench/system.h"
+#include "hwbench/system_internal.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,6 +12,8 @@
 #elif defined(__APPLE__)
   #include <sys/mount.h>
   #include <sys/sysctl.h>
+  #include <sys/wait.h>
+  #include <unistd.h>
 #else
   #include <sys/statvfs.h>
 #endif
@@ -240,18 +243,6 @@ static void detect_linux_gpu(hwb_hardware_info* out) {
       return;
     }
   }
-
-  f = popen("lspci 2>/dev/null", "r");
-  if (!f) return;
-  char line[512];
-  while (fgets(line, sizeof(line), f)) {
-    if (strstr(line, "VGA compatible controller") || strstr(line, "3D controller")) {
-      hwb_trim_newline(line);
-      hwb_copy_string(out->gpu_name, sizeof(out->gpu_name), line);
-      break;
-    }
-  }
-  pclose(f);
 }
 #endif
 
@@ -285,8 +276,35 @@ static void detect_macos_memory_storage(hwb_hardware_info* out) {
 }
 
 static void detect_macos_gpu(hwb_hardware_info* out) {
-  FILE* f = popen("system_profiler SPDisplaysDataType 2>/dev/null", "r");
-  if (!f) return;
+  int pipe_fds[2];
+  if (pipe(pipe_fds) != 0) {
+    return;
+  }
+
+  pid_t pid = fork();
+  if (pid == 0) {
+    /* child */
+    close(pipe_fds[0]);
+    dup2(pipe_fds[1], STDOUT_FILENO);
+    close(pipe_fds[1]);
+    const char* cmd = "/usr/sbin/system_profiler";
+    char* const args[] = { (char*)cmd, (char*)"SPDisplaysDataType", NULL };
+    execv(cmd, args);
+    _exit(127);
+  } else if (pid < 0) {
+    close(pipe_fds[0]);
+    close(pipe_fds[1]);
+    return;
+  }
+
+  close(pipe_fds[1]);
+  FILE* f = fdopen(pipe_fds[0], "r");
+  if (!f) {
+    close(pipe_fds[0]);
+    waitpid(pid, NULL, 0);
+    return;
+  }
+
   char line[512];
   while (fgets(line, sizeof(line), f)) {
     char* tag = strstr(line, "Chipset Model:");
@@ -298,7 +316,8 @@ static void detect_macos_gpu(hwb_hardware_info* out) {
       break;
     }
   }
-  pclose(f);
+  fclose(f);
+  waitpid(pid, NULL, 0);
 }
 #endif
 
@@ -370,21 +389,24 @@ static void detect_windows_memory_storage(hwb_hardware_info* out) {
 }
 
 static void detect_windows_gpu(hwb_hardware_info* out) {
-  FILE* f = _popen("wmic path win32_VideoController get Name /value", "r");
-  if (!f) return;
+  DISPLAY_DEVICEA dd;
+  ZeroMemory(&dd, sizeof(dd));
+  dd.cb = sizeof(dd);
 
-  char line[512];
-  while (fgets(line, sizeof(line), f)) {
-    if (strncmp(line, "Name=", 5) == 0) {
-      char* name = line + 5;
-      hwb_trim_newline(name);
-      if (name[0]) {
-        hwb_copy_string(out->gpu_name, sizeof(out->gpu_name), name);
-        break;
-      }
+  for (DWORD i = 0; EnumDisplayDevicesA(NULL, i, &dd, 0); ++i) {
+    if (dd.StateFlags & DISPLAY_DEVICE_PRIMARY_DEVICE) {
+      hwb_copy_string(out->gpu_name, sizeof(out->gpu_name), dd.DeviceString);
+      return;
     }
+    ZeroMemory(&dd, sizeof(dd));
+    dd.cb = sizeof(dd);
   }
-  _pclose(f);
+
+  ZeroMemory(&dd, sizeof(dd));
+  dd.cb = sizeof(dd);
+  if (EnumDisplayDevicesA(NULL, 0, &dd, 0)) {
+    hwb_copy_string(out->gpu_name, sizeof(out->gpu_name), dd.DeviceString);
+  }
 }
 #endif
 

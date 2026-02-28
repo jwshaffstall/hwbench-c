@@ -14,6 +14,7 @@
   #include <sys/sysctl.h>
   #include <sys/wait.h>
   #include <unistd.h>
+  #include <fcntl.h>
 #else
   #include <sys/statvfs.h>
 #endif
@@ -213,8 +214,14 @@ static void detect_linux_storage(hwb_hardware_info* out) {
 }
 
 static void detect_linux_gpu(hwb_hardware_info* out) {
-  FILE* f = fopen("/sys/class/drm/card0/device/uevent", "r");
-  if (f) {
+  char best[HWB_HWSTR_LARGE] = {0};
+
+  for (int card = 0; card < 32; ++card) {
+    char path[128];
+    snprintf(path, sizeof(path), "/sys/class/drm/card%d/device/uevent", card);
+    FILE* f = fopen(path, "r");
+    if (!f) continue;
+
     char line[256];
     char driver[64] = {0};
     char pci[64] = {0};
@@ -239,9 +246,29 @@ static void detect_linux_gpu(hwb_hardware_info* out) {
           tmp[n + 1] = '\0';
         }
       }
-      hwb_copy_string(out->gpu_name, sizeof(out->gpu_name), tmp);
-      return;
+
+      if (!best[0]) {
+        hwb_copy_string(best, sizeof(best), tmp);
+      }
+
+      snprintf(path, sizeof(path), "/sys/class/drm/card%d/device/boot_vga", card);
+      FILE* boot = fopen(path, "r");
+      int is_boot = 0;
+      if (boot) {
+        int c = fgetc(boot);
+        if (c == '1') is_boot = 1;
+        fclose(boot);
+      }
+
+      if (is_boot) {
+        hwb_copy_string(out->gpu_name, sizeof(out->gpu_name), tmp);
+        return;
+      }
     }
+  }
+
+  if (best[0]) {
+    hwb_copy_string(out->gpu_name, sizeof(out->gpu_name), best);
   }
 }
 #endif
@@ -287,6 +314,11 @@ static void detect_macos_gpu(hwb_hardware_info* out) {
     close(pipe_fds[0]);
     dup2(pipe_fds[1], STDOUT_FILENO);
     close(pipe_fds[1]);
+    int devnull = open("/dev/null", O_RDWR);
+    if (devnull >= 0) {
+      dup2(devnull, STDERR_FILENO);
+      close(devnull);
+    }
     const char* cmd = "/usr/sbin/system_profiler";
     char* const args[] = { (char*)cmd, (char*)"SPDisplaysDataType", NULL };
     execv(cmd, args);

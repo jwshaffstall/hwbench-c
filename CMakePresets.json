@@ -1,0 +1,35 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 25,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "HWB_BUILD_TESTS": "ON"
+      }
+    },
+    {"name":"linux-gcc-release","inherits":"base","cacheVariables":{"CMAKE_C_COMPILER":"gcc"}},
+    {"name":"linux-clang-release","inherits":"base","cacheVariables":{"CMAKE_C_COMPILER":"clang"}},
+    {"name":"macos-clang-release","inherits":"base"},
+    {"name":"windows-msvc-debug","inherits":"base","generator":"Ninja Multi-Config","cacheVariables":{"CMAKE_BUILD_TYPE":"Debug"}},
+    {"name":"windows-msvc-release","inherits":"base","generator":"Ninja Multi-Config"},
+    {"name":"windows-clangcl-release","inherits":"base","generator":"Ninja Multi-Config","cacheVariables":{"CMAKE_C_COMPILER":"clang-cl"}},
+    {"name":"android-arm64-release","inherits":"base","toolchainFile":"$env{ANDROID_NDK}/build/cmake/android.toolchain.cmake","cacheVariables":{"ANDROID_ABI":"arm64-v8a","ANDROID_PLATFORM":"24"}},
+    {"name":"ios-arm64-release","inherits":"base","cacheVariables":{"CMAKE_SYSTEM_NAME":"iOS","CMAKE_OSX_ARCHITECTURES":"arm64"}}
+  ],
+  "buildPresets": [
+    {"name":"linux-gcc-release","configurePreset":"linux-gcc-release"},
+    {"name":"linux-clang-release","configurePreset":"linux-clang-release"}
+  ],
+  "testPresets": [
+    {"name":"linux-gcc-release","configurePreset":"linux-gcc-release","output":{"outputOnFailure":true}}
+  ]
+}

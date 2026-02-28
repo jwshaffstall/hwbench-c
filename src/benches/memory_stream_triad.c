@@ -1,0 +1,74 @@
+#include "hwbench/bench.h"
+#include "hwbench/stats.h"
+#include "hwbench/timer.h"
+
+#include <stdlib.h>
+#include <string.h>
+
+static bool memory_stream_supported(const hwb_context* ctx) {
+  (void)ctx;
+  return true;
+}
+
+static int memory_stream_run(const hwb_context* ctx, hwb_benchmark_result* out) {
+  memset(out, 0, sizeof(*out));
+  out->id = "memory.stream.triad";
+  out->category = "memory";
+  out->variant = "scalar";
+  out->unit = "GB/s";
+  out->threads = ctx->threads;
+  out->class_kind = HWB_BENCH_CLASS_MICRO;
+  out->synthetic = true;
+
+  const size_t n = 8 * 1024 * 1024;
+  double* a = (double*)malloc(sizeof(double) * n);
+  double* b = (double*)malloc(sizeof(double) * n);
+  double* c = (double*)malloc(sizeof(double) * n);
+  if (!a || !b || !c) {
+    free(a); free(b); free(c);
+    return -1;
+  }
+
+  for (size_t i = 0; i < n; ++i) {
+    a[i] = 1.0;
+    b[i] = 2.0;
+    c[i] = 0.5;
+  }
+
+  const double scalar = 3.0;
+  double warmup_start = hwb_now_seconds();
+  while ((hwb_now_seconds() - warmup_start) * 1000.0 < (double)ctx->warmup_ms) {
+    for (size_t i = 0; i < n; ++i) {
+      a[i] = b[i] + scalar * c[i];
+    }
+  }
+  out->warmup_ms = (hwb_now_seconds() - warmup_start) * 1000.0;
+
+  double measured_start = hwb_now_seconds();
+  for (int s = 0; s < ctx->samples && s < HWB_MAX_SAMPLES; ++s) {
+    double t0 = hwb_now_seconds();
+    for (size_t i = 0; i < n; ++i) {
+      a[i] = b[i] + scalar * c[i];
+    }
+    double t1 = hwb_now_seconds();
+
+    double bytes = (double)(3 * sizeof(double) * n);
+    out->samples[out->sample_count++] = (bytes / (t1 - t0)) / 1e9;
+  }
+  out->measured_ms = (hwb_now_seconds() - measured_start) * 1000.0;
+
+  free(a); free(b); free(c);
+  return hwb_compute_stats(out->samples, out->sample_count, &out->summary);
+}
+
+const hwb_benchmark_desc hwb_bench_memory_stream_triad = {
+  .id = "memory.stream.triad",
+  .category = "memory",
+  .name = "STREAM-style triad bandwidth",
+  .unit = "GB/s",
+  .variant = "scalar",
+  .class_kind = HWB_BENCH_CLASS_MICRO,
+  .synthetic = true,
+  .is_supported = memory_stream_supported,
+  .run = memory_stream_run,
+};

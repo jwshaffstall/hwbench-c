@@ -15,6 +15,16 @@ int test_system(void) {
     return 1;
   }
 
+  if (hw.physical_cores < 1) {
+    puts("physical_cores should be >= 1");
+    return 1;
+  }
+
+  if (hw.physical_cores > hw.logical_cores) {
+    puts("physical_cores should be <= logical_cores");
+    return 1;
+  }
+
   if (strlen(hw.cpu_model) == 0) {
     puts("cpu_model should not be empty");
     return 1;

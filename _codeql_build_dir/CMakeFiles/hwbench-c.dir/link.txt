@@ -1,0 +1,1 @@
+/tmp/codeql-scratch-387308dee51c7053/dbs/cpp/working/autobuild/bin/cc -O3 -DNDEBUG -Wl,--dependency-file=CMakeFiles/hwbench-c.dir/link.d "CMakeFiles/hwbench-c.dir/apps/hwbench-cli/main.c.o" -o hwbench-c  libhwbench_core.a libhwbench_benches.a libhwbench_core.a -lm

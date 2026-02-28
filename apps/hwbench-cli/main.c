@@ -59,28 +59,36 @@ int main(int argc, char** argv) {
     return 0;
   }
 
-  hwb_benchmark_result results[HWB_MAX_SAMPLES];
+  size_t max_results = registry.count > 0 ? registry.count : 1;
+  hwb_benchmark_result* results = malloc(max_results * sizeof(hwb_benchmark_result));
+  if (!results) {
+    fprintf(stderr, "Out of memory\n");
+    return 1;
+  }
   size_t result_count = 0;
 
   if (bench_id) {
     const hwb_benchmark_desc* b = hwb_registry_find(&registry, bench_id);
     if (!b) {
       fprintf(stderr, "Unknown benchmark id: %s\n", bench_id);
+      free(results);
       return 2;
     }
     if (hwb_run_benchmark(&ctx, b, &results[result_count]) != 0) {
       fprintf(stderr, "Benchmark failed: %s\n", bench_id);
+      free(results);
       return 3;
     }
     result_count++;
   } else if (run_quick || argc == 1) {
-    for (size_t i = 0; i < registry.count; ++i) {
+    for (size_t i = 0; i < registry.count && result_count < max_results; ++i) {
       if (hwb_run_benchmark(&ctx, registry.entries[i], &results[result_count]) == 0) {
         result_count++;
       }
     }
   } else {
     print_usage();
+    free(results);
     return 1;
   }
 
@@ -93,8 +101,10 @@ int main(int argc, char** argv) {
 
   if (hwb_write_json_results(out_path, results, result_count, "0.1.0", "local-run") != 0) {
     fprintf(stderr, "Failed to write JSON output: %s\n", out_path);
+    free(results);
     return 4;
   }
 
+  free(results);
   return 0;
 }

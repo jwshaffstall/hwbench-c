@@ -34,7 +34,7 @@ add_library(hwbench_core ${HWB_LIB_TYPE}
   src/core/system.c
 )
 target_include_directories(hwbench_core PUBLIC include)
-if(NOT WIN32)
+if(NOT WIN32 AND NOT APPLE)
   target_compile_definitions(hwbench_core PRIVATE _POSIX_C_SOURCE=200809L)
 endif()
 

@@ -12,6 +12,8 @@
   - JSON result emission
 - Initial benchmarks:
   - `cpu.scalar.int_add`
+  - `cpu.scalar.fp_fma`
+  - `memory.stream.copy`
   - `memory.stream.triad`
 - Unit/smoke tests via CTest.
 
@@ -21,7 +23,7 @@ The specification is broad and targets many optional third-party integrations an
 
 - Render and compute backends are disabled by default (`HWB_BUILD_RENDER=OFF`, `HWB_BUILD_COMPUTE=OFF`).
 - Optional third-party adapters (SDL3, bgfx, SQLite, xxHash, Zstd, etc.) are represented as CMake options but not yet integrated.
-- The benchmark list currently includes only two must-have starter benchmarks to keep the code auditable and easy to validate.
+- The benchmark list currently includes a small starter set to keep the code auditable and easy to validate.
 
 ## Build and run
 
@@ -32,6 +34,41 @@ ctest --preset linux-gcc-release
 ./build/linux-gcc-release/hwbench-c --suite quick --out results.json
 ./build/linux-gcc-release/hwbench-c --list
 ```
+
+
+## Hardware detection and reporting
+
+`hwbench-c` now detects and reports local hardware metadata for benchmark context:
+
+- CPU model
+- logical and physical core counts
+- total system memory
+- total root-drive capacity and best-effort storage model
+- best-effort GPU identifier
+
+This metadata is shown in CLI output before benchmark rows and is also included under `machine` in JSON result files.
+
+## Cross-platform scripts
+
+The `scripts/` folder includes setup/build/test/run helpers for Bash (`.sh`), Windows Command Prompt (`.bat`), and PowerShell (`.ps1`).
+
+- Bash
+  - `./scripts/setup.sh`
+  - `./scripts/build.sh`
+  - `./scripts/test.sh`
+  - `./scripts/run.sh [output.json]`
+- Cmd.exe
+  - `scripts\setup.bat`
+  - `scripts\build.bat`
+  - `scripts\test.bat`
+  - `scripts\run.bat [output.json]`
+- PowerShell
+  - `./scripts/setup.ps1`
+  - `./scripts/build.ps1`
+  - `./scripts/test.ps1`
+  - `./scripts/run.ps1 [-OutPath output.json]`
+
+By default each script auto-selects a preset based on the host OS. Override it with the `HWB_PRESET` environment variable.
 
 ## Continuous Integration
 

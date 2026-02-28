@@ -34,7 +34,7 @@ add_library(hwbench_core ${HWB_LIB_TYPE}
   src/core/system.c
 )
 target_include_directories(hwbench_core PUBLIC include)
-if(NOT WIN32)
+if(NOT WIN32 AND NOT APPLE)
   target_compile_definitions(hwbench_core PRIVATE _POSIX_C_SOURCE=200809L)
 endif()
 
@@ -44,6 +44,8 @@ endif()
 
 add_library(hwbench_benches ${HWB_LIB_TYPE}
   src/benches/cpu_scalar_int_add.c
+  src/benches/cpu_scalar_fp_fma.c
+  src/benches/memory_stream_copy.c
   src/benches/memory_stream_triad.c
   src/benches/register.c
 )
@@ -58,6 +60,8 @@ if(HWB_BUILD_TESTS)
     tests/unit/test_main.c
     tests/unit/test_stats.c
     tests/unit/test_registry.c
+    tests/unit/test_system.c
+    tests/unit/test_system_linux_parse.c
   )
   target_link_libraries(hwbench-tests PRIVATE hwbench_core hwbench_benches)
   add_test(NAME hwbench-tests COMMAND hwbench-tests)

@@ -243,8 +243,8 @@ static void detect_windows_cpu(hwb_hardware_info* out) {
   /* Count physical cores; each RelationProcessorCore entry represents one core */
   out->physical_cores = 0;
   DWORD length = 0;
-  GetLogicalProcessorInformationEx(RelationProcessorCore, NULL, &length);
-  if (GetLastError() == ERROR_INSUFFICIENT_BUFFER && length > 0) {
+  BOOL got_size = GetLogicalProcessorInformationEx(RelationProcessorCore, NULL, &length);
+  if (!got_size && GetLastError() == ERROR_INSUFFICIENT_BUFFER && length > 0) {
     SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX* buf =
         (SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX*)malloc(length);
     if (buf) {

@@ -72,6 +72,8 @@ int hwb_write_json_results(const char* path,
   fprintf(f, "    \"memory_total_mb\": %llu,\n", hw.memory_total_mb);
   fprintf(f, "    \"storage_total_gb\": %llu,\n", hw.storage_total_gb);
   fprintf(f, "    \"storage_name\": "); write_json_string(f, hw.storage_name); fprintf(f, ",\n");
+  fprintf(f, "    \"storage_device_count\": %d,\n", hw.storage_device_count);
+  fprintf(f, "    \"storage_devices\": "); write_json_string(f, hw.storage_devices); fprintf(f, ",\n");
   fprintf(f, "    \"gpu_name\": "); write_json_string(f, hw.gpu_name); fprintf(f, "\n");
   fprintf(f, "  },\n");
   fprintf(f, "  \"os\": {\"name\": "); write_json_string(f, hwb_os_name()); fprintf(f, "},\n");

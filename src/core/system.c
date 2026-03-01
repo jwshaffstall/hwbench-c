@@ -16,6 +16,7 @@
   #include <unistd.h>
   #include <fcntl.h>
 #else
+  #include <dirent.h>
   #include <sys/statvfs.h>
 #endif
 
@@ -40,6 +41,24 @@ static void hwb_trim_newline(char* s) {
   while (n > 0 && (s[n - 1] == '\n' || s[n - 1] == '\r')) {
     s[--n] = '\0';
   }
+}
+
+static void hwb_append_csv_token(char* dst, size_t dst_size, const char* token) {
+  if (!dst || dst_size == 0 || !token || token[0] == '\0') return;
+  size_t used = strlen(dst);
+  if (used >= dst_size - 1) return;
+  if (used != 0) {
+    if (used + 2 >= dst_size) return;
+    dst[used++] = ',';
+    dst[used++] = ' ';
+    dst[used] = '\0';
+  }
+  size_t i = 0;
+  while (used + i + 1 < dst_size && token[i] != '\0') {
+    dst[used + i] = token[i];
+    ++i;
+  }
+  dst[used + i] = '\0';
 }
 
 const char* hwb_os_name(void) {
@@ -200,17 +219,53 @@ static void detect_linux_storage(hwb_hardware_info* out) {
     out->storage_total_gb = total / (1024ULL * 1024ULL * 1024ULL);
   }
 
-  FILE* m = fopen("/sys/block/nvme0n1/device/model", "r");
-  if (!m) m = fopen("/sys/block/sda/device/model", "r");
-  if (!m) m = fopen("/sys/block/vda/device/model", "r");
-  if (m) {
-    char buf[HWB_HWSTR_MEDIUM] = {0};
-    if (fgets(buf, sizeof(buf), m)) {
-      hwb_trim_newline(buf);
-      hwb_copy_string(out->storage_name, sizeof(out->storage_name), buf);
+  DIR* dir = opendir("/sys/block");
+  if (!dir) return;
+
+  struct dirent* ent;
+  while ((ent = readdir(dir)) != NULL) {
+    const char* dev = ent->d_name;
+    if (dev[0] == '.') continue;
+    if (strncmp(dev, "loop", 4) == 0 || strncmp(dev, "ram", 3) == 0 ||
+        strncmp(dev, "dm-", 3) == 0 || strncmp(dev, "md", 2) == 0) {
+      continue;
     }
-    fclose(m);
+
+    char model_path[PATH_MAX];
+    snprintf(model_path, sizeof(model_path), "/sys/block/%s/device/model", dev);
+    FILE* m = fopen(model_path, "r");
+    char model[HWB_HWSTR_MEDIUM] = {0};
+    if (m) {
+      if (fgets(model, sizeof(model), m)) {
+        hwb_trim_newline(model);
+      }
+      fclose(m);
+    }
+
+    if (model[0] == '\0') {
+      char vendor_path[PATH_MAX];
+      char vendor[HWB_HWSTR_SMALL] = {0};
+      snprintf(vendor_path, sizeof(vendor_path), "/sys/block/%s/device/vendor", dev);
+      FILE* v = fopen(vendor_path, "r");
+      if (v) {
+        if (fgets(vendor, sizeof(vendor), v)) hwb_trim_newline(vendor);
+        fclose(v);
+      }
+      if (vendor[0] != '\0') {
+        snprintf(model, sizeof(model), "%.63s %.63s", vendor, dev);
+      } else {
+        hwb_copy_string(model, sizeof(model), dev);
+      }
+    }
+
+    if (out->storage_name[0] == '\0') {
+      hwb_copy_string(out->storage_name, sizeof(out->storage_name), model);
+    }
+    hwb_append_csv_token(out->storage_devices, sizeof(out->storage_devices), model);
+    out->storage_device_count += 1;
   }
+
+  closedir(dir);
 }
 
 static void detect_linux_gpu(hwb_hardware_info* out) {
@@ -468,6 +523,7 @@ int hwb_detect_hardware(hwb_hardware_info* out) {
   if (out->physical_cores <= 0) out->physical_cores = out->logical_cores;
   if (out->cpu_model[0] == '\0') hwb_copy_string(out->cpu_model, sizeof(out->cpu_model), "unknown");
   if (out->storage_name[0] == '\0') hwb_copy_string(out->storage_name, sizeof(out->storage_name), "unknown");
+  if (out->storage_devices[0] == '\0') hwb_copy_string(out->storage_devices, sizeof(out->storage_devices), out->storage_name);
   if (out->gpu_name[0] == '\0') hwb_copy_string(out->gpu_name, sizeof(out->gpu_name), "unknown");
 
   return 0;

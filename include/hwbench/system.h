@@ -8,6 +8,7 @@ extern "C" {
 #define HWB_HWSTR_SMALL 64
 #define HWB_HWSTR_MEDIUM 128
 #define HWB_HWSTR_LARGE 256
+#define HWB_HWSTR_XLARGE 512
 
 typedef struct hwb_hardware_info {
   char cpu_model[HWB_HWSTR_LARGE];
@@ -16,6 +17,8 @@ typedef struct hwb_hardware_info {
   unsigned long long memory_total_mb;
   unsigned long long storage_total_gb;
   char storage_name[HWB_HWSTR_MEDIUM];
+  int storage_device_count;
+  char storage_devices[HWB_HWSTR_XLARGE];
   char gpu_name[HWB_HWSTR_LARGE];
 } hwb_hardware_info;
 

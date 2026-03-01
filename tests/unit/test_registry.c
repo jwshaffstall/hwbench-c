@@ -6,8 +6,8 @@
 int test_registry(void) {
   hwb_registry reg;
   hwb_register_default_benches(&reg);
-  if (reg.count < 4) {
-    puts("expected at least 4 benchmarks");
+  if (reg.count < 5) {
+    puts("expected at least 5 benchmarks");
     return 1;
   }
 
@@ -26,6 +26,12 @@ int test_registry(void) {
   const hwb_benchmark_desc* stream_copy = hwb_registry_find(&reg, "memory.stream.copy");
   if (!stream_copy || !stream_copy->run) {
     puts("missing memory.stream.copy run callback");
+    return 1;
+  }
+
+  const hwb_benchmark_desc* storage_seq_write = hwb_registry_find(&reg, "storage.file.seq_write");
+  if (!storage_seq_write || !storage_seq_write->run) {
+    puts("missing storage.file.seq_write run callback");
     return 1;
   }
 

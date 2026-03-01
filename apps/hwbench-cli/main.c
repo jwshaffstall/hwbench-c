@@ -56,36 +56,40 @@ int main(int argc, char** argv) {
       if (strcmp(suite, "quick") == 0) {
         run_quick = 1;
       } else {
-        char* suite_copy = (char*)malloc(strlen(suite) + 1);
-        if (!suite_copy) {
-          fprintf(stderr, "Out of memory\n");
-          return 1;
-        }
-        strcpy(suite_copy, suite);
-        for (char* token = strtok(suite_copy, ","); token; token = strtok(NULL, ",")) {
-          while (*token == ' ' || *token == '\t') token++;
-          size_t len = strlen(token);
-          while (len > 0 && (token[len - 1] == ' ' || token[len - 1] == '\t')) {
-            token[--len] = '\0';
-          }
-          if (len == 0) {
-            free(suite_copy);
+        const char* cursor = suite;
+        while (1) {
+          while (*cursor == ' ' || *cursor == '\t') cursor++;
+          if (*cursor == '\0') {
             print_usage();
             return 1;
           }
-          if (strcmp(token, "cpu") == 0) {
+          const char* token_start = cursor;
+          while (*cursor != '\0' && *cursor != ',') cursor++;
+          const char* token_end = cursor;
+          while (token_end > token_start && (token_end[-1] == ' ' || token_end[-1] == '\t')) {
+            token_end--;
+          }
+          size_t len = (size_t)(token_end - token_start);
+          if (len == 0) {
+            print_usage();
+            return 1;
+          }
+          if (len == 3 && strncmp(token_start, "cpu", 3) == 0) {
             run_cpu_suite = 1;
-          } else if (strcmp(token, "memory") == 0) {
+          } else if (len == 6 && strncmp(token_start, "memory", 6) == 0) {
             run_memory_suite = 1;
-          } else if (strcmp(token, "storage") == 0) {
+          } else if (len == 7 && strncmp(token_start, "storage", 7) == 0) {
             run_storage_suite = 1;
           } else {
-            free(suite_copy);
             print_usage();
             return 1;
           }
+          if (*cursor == ',') {
+            cursor++;
+            continue;
+          }
+          break;
         }
-        free(suite_copy);
         if (!(run_cpu_suite || run_memory_suite || run_storage_suite)) {
           print_usage();
           return 1;

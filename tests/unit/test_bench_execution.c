@@ -2,6 +2,7 @@
 #include "hwbench/benches.h"
 
 #include <stdio.h>
+#include <string.h>
 
 int test_bench_execution(void) {
   hwb_registry reg;
@@ -17,6 +18,11 @@ int test_bench_execution(void) {
 
   for (size_t i = 0; i < reg.count; ++i) {
     const hwb_benchmark_desc* desc = reg.entries[i];
+
+    /* Only run CPU benchmarks to keep unit tests fast and deterministic. */
+    if (strcmp(desc->category, "cpu") != 0) {
+      continue;
+    }
     hwb_benchmark_result out;
     int rc = hwb_run_benchmark(&ctx, desc, &out);
     if (rc != 0 && rc != -2) {

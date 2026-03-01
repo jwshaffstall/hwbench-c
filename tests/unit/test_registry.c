@@ -6,8 +6,8 @@
 int test_registry(void) {
   hwb_registry reg;
   hwb_register_default_benches(&reg);
-  if (reg.count < 10) {
-    puts("expected at least 10 benchmarks");
+  if (reg.count < 11) {
+    puts("expected at least 11 benchmarks");
     return 1;
   }
 
@@ -44,6 +44,13 @@ int test_registry(void) {
   const hwb_benchmark_desc* stream_triad = hwb_registry_find(&reg, "memory.stream.triad");
   if (!stream_triad || !stream_triad->run) {
     puts("missing memory.stream.triad run callback");
+    return 1;
+  }
+
+
+  const hwb_benchmark_desc* pointer_chase = hwb_registry_find(&reg, "memory.latency.pointer_chase");
+  if (!pointer_chase || !pointer_chase->run) {
+    puts("missing memory.latency.pointer_chase run callback");
     return 1;
   }
 

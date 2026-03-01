@@ -4,17 +4,33 @@
 
 #include <string.h>
 
-#if defined(__AVX2__) || defined(__SSE2__) || defined(__ARM_NEON) || defined(__ARM_NEON__)
+#if defined(__AVX2__) || defined(__SSE2__) || defined(_M_AMD64) || defined(_M_X64)
+#define HWB_HAS_SIMD_X86 1
+#else
+#define HWB_HAS_SIMD_X86 0
+#endif
+
+#if defined(__ARM_NEON) || defined(__ARM_NEON__) || defined(__aarch64__) || defined(_M_ARM64)
+#define HWB_HAS_SIMD_NEON 1
+#else
+#define HWB_HAS_SIMD_NEON 0
+#endif
+
+#if HWB_HAS_SIMD_X86 || HWB_HAS_SIMD_NEON
 #define HWB_HAS_SIMD 1
 #else
 #define HWB_HAS_SIMD 0
 #endif
 
-#if defined(__AVX2__) || defined(__SSE2__)
+#if HWB_HAS_SIMD_X86
 #include <immintrin.h>
 #endif
-#if defined(__ARM_NEON) || defined(__ARM_NEON__)
+#if HWB_HAS_SIMD_NEON
+#if defined(_MSC_VER)
+#include <arm64intr.h>
+#else
 #include <arm_neon.h>
+#endif
 #endif
 
 typedef enum hwb_simd_kind {
@@ -35,7 +51,7 @@ static bool hwb_simd_supported(const hwb_context* ctx) {
 
 static bool hwb_simd_i64_supported(const hwb_context* ctx) {
   (void)ctx;
-#if HWB_HAS_SIMD && (defined(__AVX2__) || defined(__SSE2__) || defined(__aarch64__) || defined(_M_ARM64))
+#if HWB_HAS_SIMD && (HWB_HAS_SIMD_X86 || (HWB_HAS_SIMD_NEON && (defined(__aarch64__) || defined(_M_ARM64))))
   return true;
 #else
   return false;
@@ -44,7 +60,7 @@ static bool hwb_simd_i64_supported(const hwb_context* ctx) {
 
 static bool hwb_simd_f64_supported(const hwb_context* ctx) {
   (void)ctx;
-#if HWB_HAS_SIMD && (defined(__AVX2__) || defined(__SSE2__) || defined(__aarch64__) || defined(_M_ARM64))
+#if HWB_HAS_SIMD && (HWB_HAS_SIMD_X86 || (HWB_HAS_SIMD_NEON && (defined(__aarch64__) || defined(_M_ARM64))))
   return true;
 #else
   return false;
@@ -58,9 +74,10 @@ static double hwb_simd_run_kernel(hwb_simd_kind kind, unsigned long long iters) 
     __m256i b = _mm256_set1_epi8(3);
     for (unsigned long long i = 0; i < iters; ++i) a = _mm256_add_epi8(a, b);
     {
-      unsigned char tmp[32];
-      _mm256_storeu_si256((__m256i*)tmp, a);
-      hwb_simd_sink += (double)tmp[0];
+      __m256i tmp = a;
+      unsigned char lane0 = 0;
+      memcpy(&lane0, &tmp, sizeof(lane0));
+      hwb_simd_sink += (double)lane0;
     }
     return 32.0;
   }
@@ -69,9 +86,10 @@ static double hwb_simd_run_kernel(hwb_simd_kind kind, unsigned long long iters) 
     __m256i b = _mm256_set1_epi16(7);
     for (unsigned long long i = 0; i < iters; ++i) a = _mm256_add_epi16(a, b);
     {
-      short tmp[16];
-      _mm256_storeu_si256((__m256i*)tmp, a);
-      hwb_simd_sink += (double)tmp[0];
+      __m256i tmp = a;
+      short lane0 = 0;
+      memcpy(&lane0, &tmp, sizeof(lane0));
+      hwb_simd_sink += (double)lane0;
     }
     return 16.0;
   }
@@ -80,9 +98,10 @@ static double hwb_simd_run_kernel(hwb_simd_kind kind, unsigned long long iters) 
     __m256i b = _mm256_set1_epi32(11);
     for (unsigned long long i = 0; i < iters; ++i) a = _mm256_add_epi32(a, b);
     {
-      int tmp[8];
-      _mm256_storeu_si256((__m256i*)tmp, a);
-      hwb_simd_sink += (double)tmp[0];
+      __m256i tmp = a;
+      int lane0 = 0;
+      memcpy(&lane0, &tmp, sizeof(lane0));
+      hwb_simd_sink += (double)lane0;
     }
     return 8.0;
   }
@@ -91,9 +110,10 @@ static double hwb_simd_run_kernel(hwb_simd_kind kind, unsigned long long iters) 
     __m256i b = _mm256_set1_epi64x(13);
     for (unsigned long long i = 0; i < iters; ++i) a = _mm256_add_epi64(a, b);
     {
-      long long tmp[4];
-      _mm256_storeu_si256((__m256i*)tmp, a);
-      hwb_simd_sink += (double)tmp[0];
+      __m256i tmp = a;
+      long long lane0 = 0;
+      memcpy(&lane0, &tmp, sizeof(lane0));
+      hwb_simd_sink += (double)lane0;
     }
     return 4.0;
   }
@@ -119,15 +139,16 @@ static double hwb_simd_run_kernel(hwb_simd_kind kind, unsigned long long iters) 
     }
     return 4.0;
   }
-#elif defined(__SSE2__)
+#elif HWB_HAS_SIMD_X86
   if (kind == HWB_SIMD_I8) {
     __m128i a = _mm_set1_epi8(1);
     __m128i b = _mm_set1_epi8(3);
     for (unsigned long long i = 0; i < iters; ++i) a = _mm_add_epi8(a, b);
     {
-      unsigned char tmp[16];
-      _mm_storeu_si128((__m128i*)tmp, a);
-      hwb_simd_sink += (double)tmp[0];
+      __m128i tmp = a;
+      unsigned char lane0 = 0;
+      memcpy(&lane0, &tmp, sizeof(lane0));
+      hwb_simd_sink += (double)lane0;
     }
     return 16.0;
   }
@@ -136,9 +157,10 @@ static double hwb_simd_run_kernel(hwb_simd_kind kind, unsigned long long iters) 
     __m128i b = _mm_set1_epi16(7);
     for (unsigned long long i = 0; i < iters; ++i) a = _mm_add_epi16(a, b);
     {
-      short tmp[8];
-      _mm_storeu_si128((__m128i*)tmp, a);
-      hwb_simd_sink += (double)tmp[0];
+      __m128i tmp = a;
+      short lane0 = 0;
+      memcpy(&lane0, &tmp, sizeof(lane0));
+      hwb_simd_sink += (double)lane0;
     }
     return 8.0;
   }
@@ -147,9 +169,10 @@ static double hwb_simd_run_kernel(hwb_simd_kind kind, unsigned long long iters) 
     __m128i b = _mm_set1_epi32(11);
     for (unsigned long long i = 0; i < iters; ++i) a = _mm_add_epi32(a, b);
     {
-      int tmp[4];
-      _mm_storeu_si128((__m128i*)tmp, a);
-      hwb_simd_sink += (double)tmp[0];
+      __m128i tmp = a;
+      int lane0 = 0;
+      memcpy(&lane0, &tmp, sizeof(lane0));
+      hwb_simd_sink += (double)lane0;
     }
     return 4.0;
   }
@@ -158,9 +181,10 @@ static double hwb_simd_run_kernel(hwb_simd_kind kind, unsigned long long iters) 
     __m128i b = _mm_set1_epi64x(13);
     for (unsigned long long i = 0; i < iters; ++i) a = _mm_add_epi64(a, b);
     {
-      long long tmp[2];
-      _mm_storeu_si128((__m128i*)tmp, a);
-      hwb_simd_sink += (double)tmp[0];
+      __m128i tmp = a;
+      long long lane0 = 0;
+      memcpy(&lane0, &tmp, sizeof(lane0));
+      hwb_simd_sink += (double)lane0;
     }
     return 2.0;
   }
@@ -186,7 +210,7 @@ static double hwb_simd_run_kernel(hwb_simd_kind kind, unsigned long long iters) 
     }
     return 2.0;
   }
-#elif defined(__ARM_NEON) || defined(__ARM_NEON__)
+#elif HWB_HAS_SIMD_NEON
   if (kind == HWB_SIMD_I8) {
     int8x16_t a = vdupq_n_s8(1);
     int8x16_t b = vdupq_n_s8(3);

@@ -276,14 +276,14 @@ static int hwb_simd_run(const hwb_context* ctx, hwb_benchmark_result* out, const
   return hwb_compute_stats(out->samples, out->sample_count, &out->summary);
 }
 
-#define HWB_DEFINE_SIMD_BENCH(NAME, ID, VARIANT, KIND, SUPPORT_FN)                                        \
+#define HWB_DEFINE_SIMD_BENCH(NAME, ID, VARIANT, LABEL, KIND, SUPPORT_FN)                              \
   static int hwb_simd_##NAME##_run(const hwb_context* ctx, hwb_benchmark_result* out) {                   \
     return hwb_simd_run(ctx, out, ID, VARIANT, KIND);                                                      \
   }                                                                                                         \
   const hwb_benchmark_desc hwb_bench_cpu_simd_##NAME = {                                                   \
     .id = ID,                                                                                               \
     .category = "cpu",                                                                                    \
-    .name = "CPU SIMD " VARIANT " throughput",                                                           \
+    .name = "CPU SIMD " LABEL " add throughput",                                                         \
     .unit = "Mops/s",                                                                                     \
     .variant = VARIANT,                                                                                     \
     .class_kind = HWB_BENCH_CLASS_MICRO,                                                                   \
@@ -292,9 +292,9 @@ static int hwb_simd_run(const hwb_context* ctx, hwb_benchmark_result* out, const
     .run = hwb_simd_##NAME##_run,                                                                           \
   }
 
-HWB_DEFINE_SIMD_BENCH(i8_add, "cpu.simd.i8_add", "simd_i8", HWB_SIMD_I8, hwb_simd_supported);
-HWB_DEFINE_SIMD_BENCH(i16_add, "cpu.simd.i16_add", "simd_i16", HWB_SIMD_I16, hwb_simd_supported);
-HWB_DEFINE_SIMD_BENCH(i32_add, "cpu.simd.i32_add", "simd_i32", HWB_SIMD_I32, hwb_simd_supported);
-HWB_DEFINE_SIMD_BENCH(i64_add, "cpu.simd.i64_add", "simd_i64", HWB_SIMD_I64, hwb_simd_i64_supported);
-HWB_DEFINE_SIMD_BENCH(f32_add, "cpu.simd.f32_add", "simd_f32", HWB_SIMD_F32, hwb_simd_supported);
-HWB_DEFINE_SIMD_BENCH(f64_add, "cpu.simd.f64_add", "simd_f64", HWB_SIMD_F64, hwb_simd_f64_supported);
+HWB_DEFINE_SIMD_BENCH(i8_add, "cpu.simd.i8_add", "simd_i8", "int8", HWB_SIMD_I8, hwb_simd_supported);
+HWB_DEFINE_SIMD_BENCH(i16_add, "cpu.simd.i16_add", "simd_i16", "int16", HWB_SIMD_I16, hwb_simd_supported);
+HWB_DEFINE_SIMD_BENCH(i32_add, "cpu.simd.i32_add", "simd_i32", "int32", HWB_SIMD_I32, hwb_simd_supported);
+HWB_DEFINE_SIMD_BENCH(i64_add, "cpu.simd.i64_add", "simd_i64", "int64", HWB_SIMD_I64, hwb_simd_i64_supported);
+HWB_DEFINE_SIMD_BENCH(f32_add, "cpu.simd.f32_add", "simd_f32", "float32", HWB_SIMD_F32, hwb_simd_supported);
+HWB_DEFINE_SIMD_BENCH(f64_add, "cpu.simd.f64_add", "simd_f64", "float64", HWB_SIMD_F64, hwb_simd_f64_supported);

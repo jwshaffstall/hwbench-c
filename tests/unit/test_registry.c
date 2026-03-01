@@ -23,6 +23,18 @@ int test_registry(void) {
     return 1;
   }
 
+  const hwb_benchmark_desc* parallel_4c = hwb_registry_find(&reg, "cpu.parallel.int_add.4c");
+  if (!parallel_4c || !parallel_4c->run) {
+    puts("missing cpu.parallel.int_add.4c run callback");
+    return 1;
+  }
+
+  const hwb_benchmark_desc* simd_i32 = hwb_registry_find(&reg, "cpu.simd.i32_add");
+  if (!simd_i32 || !simd_i32->run) {
+    puts("missing cpu.simd.i32_add run callback");
+    return 1;
+  }
+
   const hwb_benchmark_desc* stream_copy = hwb_registry_find(&reg, "memory.stream.copy");
   if (!stream_copy || !stream_copy->run) {
     puts("missing memory.stream.copy run callback");

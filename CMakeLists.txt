@@ -24,27 +24,26 @@ option(HWB_USE_CLPEAK "Enable clpeak adapter" OFF)
 option(HWB_USE_VKPEAK "Enable vkpeak adapter" OFF)
 option(HWB_USE_DAWN "Enable Dawn/WebGPU backend" OFF)
 option(HWB_FETCH_OPENCL "Fetch OpenCL headers/loader if system OpenCL is unavailable" ON)
+set(HWB_OPENCL_HEADERS_TAG "v2025.07.22" CACHE STRING "Git tag for OpenCL-Headers")
+set(HWB_OPENCL_ICD_LOADER_TAG "v2025.07.22" CACHE STRING "Git tag for OpenCL-ICD-Loader")
 
 find_package(OpenCL QUIET)
 if(NOT OpenCL_FOUND AND HWB_FETCH_OPENCL)
   FetchContent_Declare(
     opencl_headers
     GIT_REPOSITORY https://github.com/KhronosGroup/OpenCL-Headers.git
-    GIT_TAG main
+    GIT_TAG ${HWB_OPENCL_HEADERS_TAG}
     GIT_SHALLOW TRUE
   )
 
   FetchContent_Declare(
     opencl_icd_loader
     GIT_REPOSITORY https://github.com/KhronosGroup/OpenCL-ICD-Loader.git
-    GIT_TAG main
+    GIT_TAG ${HWB_OPENCL_ICD_LOADER_TAG}
     GIT_SHALLOW TRUE
   )
 
-  FetchContent_GetProperties(opencl_headers)
-  if(NOT opencl_headers_POPULATED)
-    FetchContent_Populate(opencl_headers)
-  endif()
+  FetchContent_MakeAvailable(opencl_headers)
 
   set(OPENCL_ICD_LOADER_HEADERS_DIR "${opencl_headers_SOURCE_DIR}" CACHE PATH "Path to OpenCL Headers" FORCE)
   set(OPENCL_ICD_LOADER_BUILD_TESTING OFF CACHE BOOL "" FORCE)

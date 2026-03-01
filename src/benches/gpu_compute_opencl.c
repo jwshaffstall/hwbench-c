@@ -6,6 +6,9 @@
 #include <string.h>
 
 #if defined(HWB_HAVE_OPENCL)
+#if !defined(CL_TARGET_OPENCL_VERSION)
+#define CL_TARGET_OPENCL_VERSION 120
+#endif
 #if defined(__APPLE__)
 #include <OpenCL/opencl.h>
 #else
@@ -65,11 +68,7 @@ static int hwb_opencl_init(hwb_opencl_env* env) {
     return -1;
   }
 
-#if defined(CL_VERSION_2_0)
-  env->queue = clCreateCommandQueueWithProperties(env->context, env->device, NULL, &err);
-#else
   env->queue = clCreateCommandQueue(env->context, env->device, 0, &err);
-#endif
   if (!env->queue || err != CL_SUCCESS) {
     return -1;
   }

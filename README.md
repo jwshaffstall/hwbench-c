@@ -17,6 +17,7 @@
   - `memory.stream.scale`
   - `memory.stream.add`
   - `memory.stream.triad`
+  - `memory.latency.pointer_chase`
   - `storage.seq_read`
   - `storage.seq_write`
   - `storage.rand4k_read`

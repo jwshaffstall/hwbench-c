@@ -56,9 +56,36 @@ int main(int argc, char** argv) {
       if (strcmp(suite, "quick") == 0) {
         run_quick = 1;
       } else {
-        if (strstr(suite, "cpu") != NULL) run_cpu_suite = 1;
-        if (strstr(suite, "memory") != NULL) run_memory_suite = 1;
-        if (strstr(suite, "storage") != NULL) run_storage_suite = 1;
+        char* suite_copy = (char*)malloc(strlen(suite) + 1);
+        if (!suite_copy) {
+          fprintf(stderr, "Out of memory\n");
+          return 1;
+        }
+        strcpy(suite_copy, suite);
+        for (char* token = strtok(suite_copy, ","); token; token = strtok(NULL, ",")) {
+          while (*token == ' ' || *token == '\t') token++;
+          size_t len = strlen(token);
+          while (len > 0 && (token[len - 1] == ' ' || token[len - 1] == '\t')) {
+            token[--len] = '\0';
+          }
+          if (len == 0) {
+            free(suite_copy);
+            print_usage();
+            return 1;
+          }
+          if (strcmp(token, "cpu") == 0) {
+            run_cpu_suite = 1;
+          } else if (strcmp(token, "memory") == 0) {
+            run_memory_suite = 1;
+          } else if (strcmp(token, "storage") == 0) {
+            run_storage_suite = 1;
+          } else {
+            free(suite_copy);
+            print_usage();
+            return 1;
+          }
+        }
+        free(suite_copy);
         if (!(run_cpu_suite || run_memory_suite || run_storage_suite)) {
           print_usage();
           return 1;

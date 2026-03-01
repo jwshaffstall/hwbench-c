@@ -59,6 +59,7 @@ static int storage_file_seq_write_run(const hwb_context* ctx, hwb_benchmark_resu
     double ignored = 0.0;
     if (run_one_pass(f, buf, chunk_size, chunk_count, &ignored) != 0) {
       fclose(f);
+      free(buf);
       return -1;
     }
   }

@@ -50,7 +50,7 @@ add_library(hwbench_benches ${HWB_LIB_TYPE}
   src/benches/memory_stream_add.c
   src/benches/memory_stream_triad.c
   src/benches/storage_seq_read.c
-  src/benches/storage_file_seq_write.c
+  src/benches/storage_seq_write.c
   src/benches/storage_rand4k_read.c
   src/benches/storage_rand4k_write.c
   src/benches/register.c

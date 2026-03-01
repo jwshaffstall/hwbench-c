@@ -6,8 +6,8 @@
 int test_registry(void) {
   hwb_registry reg;
   hwb_register_default_benches(&reg);
-  if (reg.count < 9) {
-    puts("expected at least 9 benchmarks");
+  if (reg.count < 10) {
+    puts("expected at least 10 benchmarks");
     return 1;
   }
 
@@ -41,6 +41,12 @@ int test_registry(void) {
     return 1;
   }
 
+  const hwb_benchmark_desc* stream_triad = hwb_registry_find(&reg, "memory.stream.triad");
+  if (!stream_triad || !stream_triad->run) {
+    puts("missing memory.stream.triad run callback");
+    return 1;
+  }
+
   const hwb_benchmark_desc* storage_seq_read = hwb_registry_find(&reg, "storage.seq_read");
   if (!storage_seq_read || !storage_seq_read->run) {
     puts("missing storage.seq_read run callback");
@@ -61,7 +67,19 @@ int test_registry(void) {
 
   const hwb_benchmark_desc* storage_seq_write = hwb_registry_find(&reg, "storage.seq_write");
   if (!storage_seq_write || !storage_seq_write->run) {
-    puts("missing storage.file.seq_write run callback");
+    puts("missing storage.seq_write run callback");
+    return 1;
+  }
+
+  const hwb_benchmark_desc* int_add_alias = hwb_registry_find(&reg, "cpu.scalar.add");
+  if (!int_add_alias || int_add_alias != int_add) {
+    puts("cpu.scalar.add alias did not resolve to cpu.scalar.int_add");
+    return 1;
+  }
+
+  const hwb_benchmark_desc* storage_seq_write_alias = hwb_registry_find(&reg, "storage.file.seq_write");
+  if (!storage_seq_write_alias || storage_seq_write_alias != storage_seq_write) {
+    puts("storage.file.seq_write alias did not resolve to storage.seq_write");
     return 1;
   }
 

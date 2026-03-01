@@ -12,17 +12,17 @@ const hwb_benchmark_desc* hwb_registry_find(const hwb_registry* registry, const 
     return NULL;
   }
 
-  for (size_t i = 0; i < registry->count; ++i) {
-    if (strcmp(registry->entries[i]->id, id) == 0) {
-      return registry->entries[i];
-    }
+  const char* canonical_id = id;
+  if (strcmp(id, "cpu.scalar.add") == 0) {
+    canonical_id = "cpu.scalar.int_add";
+  } else if (strcmp(id, "storage.file.seq_write") == 0) {
+    canonical_id = "storage.seq_write";
   }
 
-  if (strcmp(id, "cpu.scalar.add") == 0) {
-    return hwb_registry_find(registry, "cpu.scalar.int_add");
-  }
-  if (strcmp(id, "storage.file.seq_write") == 0) {
-    return hwb_registry_find(registry, "storage.seq_write");
+  for (size_t i = 0; i < registry->count; ++i) {
+    if (strcmp(registry->entries[i]->id, canonical_id) == 0) {
+      return registry->entries[i];
+    }
   }
 
   return NULL;

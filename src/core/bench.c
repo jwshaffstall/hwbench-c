@@ -8,11 +8,23 @@ void hwb_registry_init(hwb_registry* registry, const hwb_benchmark_desc** entrie
 }
 
 const hwb_benchmark_desc* hwb_registry_find(const hwb_registry* registry, const char* id) {
+  if (!registry || !id) {
+    return NULL;
+  }
+
   for (size_t i = 0; i < registry->count; ++i) {
     if (strcmp(registry->entries[i]->id, id) == 0) {
       return registry->entries[i];
     }
   }
+
+  if (strcmp(id, "cpu.scalar.add") == 0) {
+    return hwb_registry_find(registry, "cpu.scalar.int_add");
+  }
+  if (strcmp(id, "storage.file.seq_write") == 0) {
+    return hwb_registry_find(registry, "storage.seq_write");
+  }
+
   return NULL;
 }
 

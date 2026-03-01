@@ -6,8 +6,8 @@
 int test_registry(void) {
   hwb_registry reg;
   hwb_register_default_benches(&reg);
-  if (reg.count < 5) {
-    puts("expected at least 5 benchmarks");
+  if (reg.count < 9) {
+    puts("expected at least 9 benchmarks");
     return 1;
   }
 
@@ -29,7 +29,37 @@ int test_registry(void) {
     return 1;
   }
 
-  const hwb_benchmark_desc* storage_seq_write = hwb_registry_find(&reg, "storage.file.seq_write");
+  const hwb_benchmark_desc* stream_scale = hwb_registry_find(&reg, "memory.stream.scale");
+  if (!stream_scale || !stream_scale->run) {
+    puts("missing memory.stream.scale run callback");
+    return 1;
+  }
+
+  const hwb_benchmark_desc* stream_add = hwb_registry_find(&reg, "memory.stream.add");
+  if (!stream_add || !stream_add->run) {
+    puts("missing memory.stream.add run callback");
+    return 1;
+  }
+
+  const hwb_benchmark_desc* storage_seq_read = hwb_registry_find(&reg, "storage.seq_read");
+  if (!storage_seq_read || !storage_seq_read->run) {
+    puts("missing storage.seq_read run callback");
+    return 1;
+  }
+
+  const hwb_benchmark_desc* storage_rand4k_read = hwb_registry_find(&reg, "storage.rand4k_read");
+  if (!storage_rand4k_read || !storage_rand4k_read->run) {
+    puts("missing storage.rand4k_read run callback");
+    return 1;
+  }
+
+  const hwb_benchmark_desc* storage_rand4k_write = hwb_registry_find(&reg, "storage.rand4k_write");
+  if (!storage_rand4k_write || !storage_rand4k_write->run) {
+    puts("missing storage.rand4k_write run callback");
+    return 1;
+  }
+
+  const hwb_benchmark_desc* storage_seq_write = hwb_registry_find(&reg, "storage.seq_write");
   if (!storage_seq_write || !storage_seq_write->run) {
     puts("missing storage.file.seq_write run callback");
     return 1;

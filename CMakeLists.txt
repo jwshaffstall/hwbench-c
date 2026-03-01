@@ -7,6 +7,8 @@ set(CMAKE_C_EXTENSIONS OFF)
 
 include(CTest)
 
+find_package(Threads REQUIRED)
+
 option(HWB_BUILD_SHARED "Build shared libraries" OFF)
 option(HWB_BUILD_TESTS "Build unit tests" ON)
 option(HWB_BUILD_RENDER "Enable render benchmarks" OFF)
@@ -45,6 +47,8 @@ endif()
 add_library(hwbench_benches ${HWB_LIB_TYPE}
   src/benches/cpu_scalar_int_add.c
   src/benches/cpu_scalar_fp_fma.c
+  src/benches/cpu_parallel_int_add.c
+  src/benches/cpu_simd_vector_add.c
   src/benches/memory_stream_copy.c
   src/benches/memory_stream_scale.c
   src/benches/memory_stream_add.c
@@ -57,7 +61,7 @@ add_library(hwbench_benches ${HWB_LIB_TYPE}
   src/benches/register.c
 )
 target_include_directories(hwbench_benches PUBLIC include)
-target_link_libraries(hwbench_benches PUBLIC hwbench_core)
+target_link_libraries(hwbench_benches PUBLIC hwbench_core Threads::Threads)
 
 add_executable(hwbench-c apps/hwbench-cli/main.c)
 target_link_libraries(hwbench-c PRIVATE hwbench_core hwbench_benches)
@@ -69,6 +73,7 @@ if(HWB_BUILD_TESTS)
     tests/unit/test_registry.c
     tests/unit/test_system.c
     tests/unit/test_system_linux_parse.c
+    tests/unit/test_bench_execution.c
   )
   target_link_libraries(hwbench-tests PRIVATE hwbench_core hwbench_benches)
   add_test(NAME hwbench-tests COMMAND hwbench-tests)

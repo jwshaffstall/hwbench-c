@@ -6,8 +6,8 @@
 int test_registry(void) {
   hwb_registry reg;
   hwb_register_default_benches(&reg);
-  if (reg.count < 11) {
-    puts("expected at least 11 benchmarks");
+  if (reg.count < 24) {
+    puts("expected at least 24 benchmarks");
     return 1;
   }
 
@@ -20,6 +20,18 @@ int test_registry(void) {
   const hwb_benchmark_desc* fp_fma = hwb_registry_find(&reg, "cpu.scalar.fp_fma");
   if (!fp_fma || !fp_fma->run) {
     puts("missing cpu.scalar.fp_fma run callback");
+    return 1;
+  }
+
+  const hwb_benchmark_desc* parallel_4c = hwb_registry_find(&reg, "cpu.parallel.int_add.4c");
+  if (!parallel_4c || !parallel_4c->run) {
+    puts("missing cpu.parallel.int_add.4c run callback");
+    return 1;
+  }
+
+  const hwb_benchmark_desc* simd_i32 = hwb_registry_find(&reg, "cpu.simd.i32_add");
+  if (!simd_i32 || !simd_i32->run) {
+    puts("missing cpu.simd.i32_add run callback");
     return 1;
   }
 

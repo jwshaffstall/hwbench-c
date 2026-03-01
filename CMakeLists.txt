@@ -69,4 +69,7 @@ if(HWB_BUILD_TESTS)
 
   add_test(NAME hwbench-smoke-list COMMAND hwbench-c --list)
   add_test(NAME hwbench-smoke-quick COMMAND hwbench-c --suite quick --samples 3 --warmup-ms 10 --min-sample-ms 10)
+  add_test(NAME hwbench-smoke-suite-cpu-memory COMMAND hwbench-c --suite cpu,memory --samples 1 --warmup-ms 5 --min-sample-ms 5)
+  add_test(NAME hwbench-smoke-suite-invalid COMMAND hwbench-c --suite cpu,,memory)
+  set_tests_properties(hwbench-smoke-suite-invalid PROPERTIES WILL_FAIL TRUE)
 endif()

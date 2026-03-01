@@ -523,7 +523,12 @@ int hwb_detect_hardware(hwb_hardware_info* out) {
   if (out->physical_cores <= 0) out->physical_cores = out->logical_cores;
   if (out->cpu_model[0] == '\0') hwb_copy_string(out->cpu_model, sizeof(out->cpu_model), "unknown");
   if (out->storage_name[0] == '\0') hwb_copy_string(out->storage_name, sizeof(out->storage_name), "unknown");
-  if (out->storage_devices[0] == '\0') hwb_copy_string(out->storage_devices, sizeof(out->storage_devices), out->storage_name);
+  if (out->storage_devices[0] == '\0') {
+    hwb_copy_string(out->storage_devices, sizeof(out->storage_devices), out->storage_name);
+    if (out->storage_device_count == 0) {
+      out->storage_device_count = 1;
+    }
+  }
   if (out->gpu_name[0] == '\0') hwb_copy_string(out->gpu_name, sizeof(out->gpu_name), "unknown");
 
   return 0;

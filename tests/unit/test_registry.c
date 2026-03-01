@@ -7,7 +7,7 @@ int test_registry(void) {
   hwb_registry reg;
   hwb_register_default_benches(&reg);
   if (reg.count < 11) {
-    puts("expected at least 10 benchmarks");
+    puts("expected at least 11 benchmarks");
     return 1;
   }
 

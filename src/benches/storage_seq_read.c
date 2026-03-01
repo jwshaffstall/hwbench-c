@@ -6,9 +6,19 @@
 #include <stdlib.h>
 #include <string.h>
 
-static bool storage_file_seq_write_supported(const hwb_context* ctx) {
+static bool storage_seq_read_supported(const hwb_context* ctx) {
   (void)ctx;
   return true;
+}
+
+static int fill_file(FILE* f, const unsigned char* buf, size_t chunk_size, size_t chunk_count) {
+  rewind(f);
+  for (size_t i = 0; i < chunk_count; ++i) {
+    if (fwrite(buf, 1, chunk_size, f) != chunk_size) return -1;
+  }
+  if (fflush(f) != 0) return -1;
+  rewind(f);
+  return 0;
 }
 
 static int run_one_pass(FILE* f, unsigned char* buf, size_t chunk_size, size_t chunk_count, double* mib_per_s) {
@@ -17,12 +27,7 @@ static int run_one_pass(FILE* f, unsigned char* buf, size_t chunk_size, size_t c
 
   double t0 = hwb_now_seconds();
   for (size_t i = 0; i < chunk_count; ++i) {
-    if (fwrite(buf, 1, chunk_size, f) != chunk_size) {
-      return -1;
-    }
-  }
-  if (fflush(f) != 0) {
-    return -1;
+    if (fread(buf, 1, chunk_size, f) != chunk_size) return -1;
   }
   double t1 = hwb_now_seconds();
   double mib = (double)(chunk_size * chunk_count) / (1024.0 * 1024.0);
@@ -30,9 +35,9 @@ static int run_one_pass(FILE* f, unsigned char* buf, size_t chunk_size, size_t c
   return 0;
 }
 
-static int storage_file_seq_write_run(const hwb_context* ctx, hwb_benchmark_result* out) {
+static int storage_seq_read_run(const hwb_context* ctx, hwb_benchmark_result* out) {
   memset(out, 0, sizeof(*out));
-  out->id = "storage.file.seq_write";
+  out->id = "storage.seq_read";
   out->category = "storage";
   out->variant = "tempfile";
   out->unit = "MiB/s";
@@ -41,15 +46,25 @@ static int storage_file_seq_write_run(const hwb_context* ctx, hwb_benchmark_resu
   out->synthetic = true;
 
   const size_t chunk_size = 1024 * 1024;
-  const size_t chunk_count = 64;
+  size_t chunk_count = 64;
+  if (ctx->min_sample_ms <= 5 || ctx->warmup_ms <= 5) {
+    chunk_count = 8;
+  } else if (ctx->min_sample_ms <= 15 || ctx->warmup_ms <= 15) {
+    chunk_count = 16;
+  } else if (ctx->min_sample_ms <= 30 || ctx->warmup_ms <= 30) {
+    chunk_count = 32;
+  }
   unsigned char* buf = (unsigned char*)malloc(chunk_size);
   if (!buf) return -1;
-  for (size_t i = 0; i < chunk_size; ++i) {
-    buf[i] = (unsigned char)(i & 0xFFU);
-  }
+  for (size_t i = 0; i < chunk_size; ++i) buf[i] = (unsigned char)(i & 0xFFU);
 
   FILE* f = tmpfile();
   if (!f) {
+    free(buf);
+    return -1;
+  }
+  if (fill_file(f, buf, chunk_size, chunk_count) != 0) {
+    fclose(f);
     free(buf);
     return -1;
   }
@@ -82,14 +97,14 @@ static int storage_file_seq_write_run(const hwb_context* ctx, hwb_benchmark_resu
   return hwb_compute_stats(out->samples, out->sample_count, &out->summary);
 }
 
-const hwb_benchmark_desc hwb_bench_storage_file_seq_write = {
-  .id = "storage.file.seq_write",
+const hwb_benchmark_desc hwb_bench_storage_seq_read = {
+  .id = "storage.seq_read",
   .category = "storage",
-  .name = "Sequential temp-file write throughput",
+  .name = "Sequential temp-file read throughput",
   .unit = "MiB/s",
   .variant = "tempfile",
   .class_kind = HWB_BENCH_CLASS_COMPONENT,
   .synthetic = true,
-  .is_supported = storage_file_seq_write_supported,
-  .run = storage_file_seq_write_run,
+  .is_supported = storage_seq_read_supported,
+  .run = storage_seq_read_run,
 };

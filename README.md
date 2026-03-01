@@ -14,7 +14,13 @@
   - `cpu.scalar.int_add`
   - `cpu.scalar.fp_fma`
   - `memory.stream.copy`
+  - `memory.stream.scale`
+  - `memory.stream.add`
   - `memory.stream.triad`
+  - `storage.seq_read`
+  - `storage.seq_write`
+  - `storage.rand4k_read`
+  - `storage.rand4k_write`
 - Unit/smoke tests via CTest.
 
 ## Pragmatic deviations from spec

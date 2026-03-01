@@ -20,6 +20,15 @@ static void print_usage(void) {
 }
 
 
+static void print_result_header(void) {
+  puts("BENCHMARK	VARIANT	THREADS	MEDIAN	UNIT	CV%");
+}
+
+static void print_result_row(const hwb_benchmark_result* r) {
+  printf("%s	%s	%d	%.3f	%s	%.2f\n",
+         r->id, r->variant, r->threads, r->summary.median, r->unit, r->summary.cv);
+}
+
 static void print_hardware_report(void) {
   hwb_hardware_info hw;
   if (hwb_detect_hardware(&hw) != 0) {
@@ -131,6 +140,7 @@ int main(int argc, char** argv) {
     return 1;
   }
   size_t result_count = 0;
+  int printed_header = 0;
 
   if (bench_id) {
     const hwb_benchmark_desc* b = hwb_registry_find(&registry, bench_id);
@@ -151,6 +161,12 @@ int main(int argc, char** argv) {
       return 3;
     }
     result_count++;
+    if (!printed_header) {
+      print_hardware_report();
+      print_result_header();
+      printed_header = 1;
+    }
+    print_result_row(&results[result_count - 1]);
   } else if (run_quick || argc == 1 || run_cpu_suite || run_memory_suite || run_storage_suite || run_gpu_suite) {
     for (size_t i = 0; i < registry.count && result_count < max_results; ++i) {
       const hwb_benchmark_desc* b = registry.entries[i];
@@ -163,6 +179,12 @@ int main(int argc, char** argv) {
 
       if (hwb_run_benchmark(&ctx, b, &results[result_count]) == 0) {
         result_count++;
+        if (!printed_header) {
+          print_hardware_report();
+          print_result_header();
+          printed_header = 1;
+        }
+        print_result_row(&results[result_count - 1]);
       }
     }
   } else {
@@ -171,12 +193,9 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  print_hardware_report();
-  puts("BENCHMARK\tVARIANT\tTHREADS\tMEDIAN\tUNIT\tCV%");
-  for (size_t i = 0; i < result_count; ++i) {
-    hwb_benchmark_result* r = &results[i];
-    printf("%s\t%s\t%d\t%.3f\t%s\t%.2f\n",
-           r->id, r->variant, r->threads, r->summary.median, r->unit, r->summary.cv);
+  if (!printed_header) {
+    print_hardware_report();
+    print_result_header();
   }
 
   if (hwb_write_json_results(out_path, results, result_count, "0.1.0", "local-run") != 0) {

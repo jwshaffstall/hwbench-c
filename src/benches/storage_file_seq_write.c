@@ -3,6 +3,7 @@
 #include "hwbench/timer.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static bool storage_file_seq_write_supported(const hwb_context* ctx) {
@@ -41,13 +42,17 @@ static int storage_file_seq_write_run(const hwb_context* ctx, hwb_benchmark_resu
 
   const size_t chunk_size = 1024 * 1024;
   const size_t chunk_count = 64;
-  unsigned char buf[1024 * 1024];
-  for (size_t i = 0; i < sizeof(buf); ++i) {
+  unsigned char* buf = (unsigned char*)malloc(chunk_size);
+  if (!buf) return -1;
+  for (size_t i = 0; i < chunk_size; ++i) {
     buf[i] = (unsigned char)(i & 0xFFU);
   }
 
   FILE* f = tmpfile();
-  if (!f) return -1;
+  if (!f) {
+    free(buf);
+    return -1;
+  }
 
   double warmup_start = hwb_now_seconds();
   while ((hwb_now_seconds() - warmup_start) * 1000.0 < (double)ctx->warmup_ms) {
@@ -64,6 +69,7 @@ static int storage_file_seq_write_run(const hwb_context* ctx, hwb_benchmark_resu
     double mib_per_s = 0.0;
     if (run_one_pass(f, buf, chunk_size, chunk_count, &mib_per_s) != 0) {
       fclose(f);
+      free(buf);
       return -1;
     }
     out->samples[out->sample_count++] = mib_per_s;
@@ -71,6 +77,7 @@ static int storage_file_seq_write_run(const hwb_context* ctx, hwb_benchmark_resu
   out->measured_ms = (hwb_now_seconds() - measured_start) * 1000.0;
 
   fclose(f);
+  free(buf);
   return hwb_compute_stats(out->samples, out->sample_count, &out->summary);
 }
 

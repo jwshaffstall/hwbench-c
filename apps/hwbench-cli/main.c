@@ -56,9 +56,40 @@ int main(int argc, char** argv) {
       if (strcmp(suite, "quick") == 0) {
         run_quick = 1;
       } else {
-        if (strstr(suite, "cpu") != NULL) run_cpu_suite = 1;
-        if (strstr(suite, "memory") != NULL) run_memory_suite = 1;
-        if (strstr(suite, "storage") != NULL) run_storage_suite = 1;
+        const char* cursor = suite;
+        while (1) {
+          while (*cursor == ' ' || *cursor == '\t') cursor++;
+          if (*cursor == '\0') {
+            print_usage();
+            return 1;
+          }
+          const char* token_start = cursor;
+          while (*cursor != '\0' && *cursor != ',') cursor++;
+          const char* token_end = cursor;
+          while (token_end > token_start && (token_end[-1] == ' ' || token_end[-1] == '\t')) {
+            token_end--;
+          }
+          size_t len = (size_t)(token_end - token_start);
+          if (len == 0) {
+            print_usage();
+            return 1;
+          }
+          if (len == 3 && strncmp(token_start, "cpu", 3) == 0) {
+            run_cpu_suite = 1;
+          } else if (len == 6 && strncmp(token_start, "memory", 6) == 0) {
+            run_memory_suite = 1;
+          } else if (len == 7 && strncmp(token_start, "storage", 7) == 0) {
+            run_storage_suite = 1;
+          } else {
+            print_usage();
+            return 1;
+          }
+          if (*cursor == ',') {
+            cursor++;
+            continue;
+          }
+          break;
+        }
         if (!(run_cpu_suite || run_memory_suite || run_storage_suite)) {
           print_usage();
           return 1;

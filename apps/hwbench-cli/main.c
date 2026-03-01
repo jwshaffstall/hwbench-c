@@ -10,7 +10,7 @@
 static void print_usage(void) {
   puts("hwbench-c options:\n"
        "  --list\n"
-       "  --suite quick\n"
+       "  --suite quick|cpu|memory|storage|cpu,memory,storage\n"
        "  --bench <id>\n"
        "  --samples <n>\n"
        "  --warmup-ms <ms>\n"
@@ -30,7 +30,8 @@ static void print_hardware_report(void) {
   printf("  CPU: %s\n", hw.cpu_model);
   printf("  Cores: %d logical / %d physical\n", hw.logical_cores, hw.physical_cores);
   printf("  Memory: %llu MB\n", hw.memory_total_mb);
-  printf("  Storage: %s (%llu GB total)\n", hw.storage_name, hw.storage_total_gb);
+  printf("  Storage: %s (%llu GB total, %d devices)\n", hw.storage_name, hw.storage_total_gb, hw.storage_device_count);
+  printf("  Storage devices: %s\n", hw.storage_devices);
   printf("  GPU: %s\n", hw.gpu_name);
 }
 
@@ -42,13 +43,27 @@ int main(int argc, char** argv) {
   const char* bench_id = NULL;
   int list_only = 0;
   int run_quick = 0;
+  int run_cpu_suite = 0;
+  int run_memory_suite = 0;
+  int run_storage_suite = 0;
   const char* out_path = "hwbench-results.json";
 
   for (int i = 1; i < argc; ++i) {
     if (strcmp(argv[i], "--list") == 0) {
       list_only = 1;
     } else if (strcmp(argv[i], "--suite") == 0 && i + 1 < argc) {
-      if (strcmp(argv[++i], "quick") == 0) run_quick = 1;
+      const char* suite = argv[++i];
+      if (strcmp(suite, "quick") == 0) {
+        run_quick = 1;
+      } else {
+        if (strstr(suite, "cpu") != NULL) run_cpu_suite = 1;
+        if (strstr(suite, "memory") != NULL) run_memory_suite = 1;
+        if (strstr(suite, "storage") != NULL) run_storage_suite = 1;
+        if (!(run_cpu_suite || run_memory_suite || run_storage_suite)) {
+          print_usage();
+          return 1;
+        }
+      }
     } else if (strcmp(argv[i], "--bench") == 0 && i + 1 < argc) {
       bench_id = argv[++i];
     } else if (strcmp(argv[i], "--samples") == 0 && i + 1 < argc) {
@@ -102,9 +117,16 @@ int main(int argc, char** argv) {
       return 3;
     }
     result_count++;
-  } else if (run_quick || argc == 1) {
+  } else if (run_quick || argc == 1 || run_cpu_suite || run_memory_suite || run_storage_suite) {
     for (size_t i = 0; i < registry.count && result_count < max_results; ++i) {
-      if (hwb_run_benchmark(&ctx, registry.entries[i], &results[result_count]) == 0) {
+      const hwb_benchmark_desc* b = registry.entries[i];
+      int selected = run_quick || argc == 1;
+      if (!selected && run_cpu_suite && strcmp(b->category, "cpu") == 0) selected = 1;
+      if (!selected && run_memory_suite && strcmp(b->category, "memory") == 0) selected = 1;
+      if (!selected && run_storage_suite && strcmp(b->category, "storage") == 0) selected = 1;
+      if (!selected) continue;
+
+      if (hwb_run_benchmark(&ctx, b, &results[result_count]) == 0) {
         result_count++;
       }
     }

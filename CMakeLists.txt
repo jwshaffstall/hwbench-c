@@ -47,6 +47,7 @@ add_library(hwbench_benches ${HWB_LIB_TYPE}
   src/benches/cpu_scalar_fp_fma.c
   src/benches/memory_stream_copy.c
   src/benches/memory_stream_triad.c
+  src/benches/storage_file_seq_write.c
   src/benches/register.c
 )
 target_include_directories(hwbench_benches PUBLIC include)

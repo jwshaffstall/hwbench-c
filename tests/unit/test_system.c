@@ -35,5 +35,15 @@ int test_system(void) {
     return 1;
   }
 
+  if (strlen(hw.storage_devices) == 0) {
+    puts("storage_devices should not be empty");
+    return 1;
+  }
+
+  if (hw.storage_device_count < 0) {
+    puts("storage_device_count should be >= 0");
+    return 1;
+  }
+
   return 0;
 }

@@ -46,7 +46,14 @@ static int storage_seq_read_run(const hwb_context* ctx, hwb_benchmark_result* ou
   out->synthetic = true;
 
   const size_t chunk_size = 1024 * 1024;
-  const size_t chunk_count = 64;
+  size_t chunk_count = 64;
+  if (ctx->min_sample_ms <= 5 || ctx->warmup_ms <= 5) {
+    chunk_count = 8;
+  } else if (ctx->min_sample_ms <= 15 || ctx->warmup_ms <= 15) {
+    chunk_count = 16;
+  } else if (ctx->min_sample_ms <= 30 || ctx->warmup_ms <= 30) {
+    chunk_count = 32;
+  }
   unsigned char* buf = (unsigned char*)malloc(chunk_size);
   if (!buf) return -1;
   for (size_t i = 0; i < chunk_size; ++i) buf[i] = (unsigned char)(i & 0xFFU);

@@ -43,7 +43,17 @@ static int storage_rand4k_write_run(const hwb_context* ctx, hwb_benchmark_result
   out->class_kind = HWB_BENCH_CLASS_COMPONENT;
   out->synthetic = true;
 
-  const size_t pages = 16384;
+  size_t pages = 16384;
+  if (ctx->min_sample_ms > 0) {
+    double scale = (double)ctx->min_sample_ms / 100.0;
+    if (scale > 1.0) {
+      scale = 1.0;
+    } else if (scale < 0.0625) {
+      scale = 0.0625;
+    }
+    pages = (size_t)(16384.0 * scale);
+    if (pages < 1) pages = 1;
+  }
   unsigned char* page = (unsigned char*)malloc(4096);
   if (!page) return -1;
   memset(page, 0x5A, 4096);

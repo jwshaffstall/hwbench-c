@@ -6,6 +6,7 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 
 include(CTest)
+include(FetchContent)
 
 find_package(Threads REQUIRED)
 
@@ -22,6 +23,43 @@ option(HWB_USE_JPEG_TURBO "Enable libjpeg-turbo benchmarks" OFF)
 option(HWB_USE_CLPEAK "Enable clpeak adapter" OFF)
 option(HWB_USE_VKPEAK "Enable vkpeak adapter" OFF)
 option(HWB_USE_DAWN "Enable Dawn/WebGPU backend" OFF)
+option(HWB_FETCH_OPENCL "Fetch OpenCL headers/loader if system OpenCL is unavailable" ON)
+
+find_package(OpenCL QUIET)
+if(NOT OpenCL_FOUND AND HWB_FETCH_OPENCL)
+  FetchContent_Declare(
+    opencl_headers
+    GIT_REPOSITORY https://github.com/KhronosGroup/OpenCL-Headers.git
+    GIT_TAG main
+    GIT_SHALLOW TRUE
+  )
+
+  FetchContent_Declare(
+    opencl_icd_loader
+    GIT_REPOSITORY https://github.com/KhronosGroup/OpenCL-ICD-Loader.git
+    GIT_TAG main
+    GIT_SHALLOW TRUE
+  )
+
+  FetchContent_GetProperties(opencl_headers)
+  if(NOT opencl_headers_POPULATED)
+    FetchContent_Populate(opencl_headers)
+  endif()
+
+  set(OPENCL_ICD_LOADER_HEADERS_DIR "${opencl_headers_SOURCE_DIR}" CACHE PATH "Path to OpenCL Headers" FORCE)
+  set(OPENCL_ICD_LOADER_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+  set(OPENCL_ICD_LOADER_BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+
+  FetchContent_MakeAvailable(opencl_icd_loader)
+
+  if(TARGET OpenCL::OpenCL)
+    set(OpenCL_FOUND TRUE)
+  endif()
+endif()
+
+if(OpenCL_FOUND)
+  message(STATUS "OpenCL detected: enabling first-pass GPU compute benchmarks")
+endif()
 
 set(HWB_LIB_TYPE STATIC)
 if(HWB_BUILD_SHARED)
@@ -58,10 +96,15 @@ add_library(hwbench_benches ${HWB_LIB_TYPE}
   src/benches/storage_seq_write.c
   src/benches/storage_rand4k_read.c
   src/benches/storage_rand4k_write.c
+  src/benches/gpu_compute_opencl.c
   src/benches/register.c
 )
 target_include_directories(hwbench_benches PUBLIC include)
 target_link_libraries(hwbench_benches PUBLIC hwbench_core Threads::Threads)
+if(OpenCL_FOUND)
+  target_compile_definitions(hwbench_benches PRIVATE HWB_HAVE_OPENCL=1)
+  target_link_libraries(hwbench_benches PUBLIC OpenCL::OpenCL)
+endif()
 
 add_executable(hwbench-c apps/hwbench-cli/main.c)
 target_link_libraries(hwbench-c PRIVATE hwbench_core hwbench_benches)

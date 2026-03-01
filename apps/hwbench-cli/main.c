@@ -10,7 +10,7 @@
 static void print_usage(void) {
   puts("hwbench-c options:\n"
        "  --list\n"
-       "  --suite quick|cpu|memory|storage|cpu,memory,storage\n"
+       "  --suite quick|cpu|memory|storage|gpu|cpu,memory,storage,gpu\n"
        "  --bench <id>\n"
        "  --samples <n>\n"
        "  --warmup-ms <ms>\n"
@@ -46,6 +46,7 @@ int main(int argc, char** argv) {
   int run_cpu_suite = 0;
   int run_memory_suite = 0;
   int run_storage_suite = 0;
+  int run_gpu_suite = 0;
   const char* out_path = "hwbench-results.json";
 
   for (int i = 1; i < argc; ++i) {
@@ -80,6 +81,8 @@ int main(int argc, char** argv) {
             run_memory_suite = 1;
           } else if (len == 7 && strncmp(token_start, "storage", 7) == 0) {
             run_storage_suite = 1;
+          } else if (len == 3 && strncmp(token_start, "gpu", 3) == 0) {
+            run_gpu_suite = 1;
           } else {
             print_usage();
             return 1;
@@ -90,7 +93,7 @@ int main(int argc, char** argv) {
           }
           break;
         }
-        if (!(run_cpu_suite || run_memory_suite || run_storage_suite)) {
+        if (!(run_cpu_suite || run_memory_suite || run_storage_suite || run_gpu_suite)) {
           print_usage();
           return 1;
         }
@@ -148,13 +151,14 @@ int main(int argc, char** argv) {
       return 3;
     }
     result_count++;
-  } else if (run_quick || argc == 1 || run_cpu_suite || run_memory_suite || run_storage_suite) {
+  } else if (run_quick || argc == 1 || run_cpu_suite || run_memory_suite || run_storage_suite || run_gpu_suite) {
     for (size_t i = 0; i < registry.count && result_count < max_results; ++i) {
       const hwb_benchmark_desc* b = registry.entries[i];
       int selected = run_quick || argc == 1;
       if (!selected && run_cpu_suite && strcmp(b->category, "cpu") == 0) selected = 1;
       if (!selected && run_memory_suite && strcmp(b->category, "memory") == 0) selected = 1;
       if (!selected && run_storage_suite && strcmp(b->category, "storage") == 0) selected = 1;
+      if (!selected && run_gpu_suite && strcmp(b->category, "gpu") == 0) selected = 1;
       if (!selected) continue;
 
       if (hwb_run_benchmark(&ctx, b, &results[result_count]) == 0) {

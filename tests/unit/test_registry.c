@@ -6,8 +6,8 @@
 int test_registry(void) {
   hwb_registry reg;
   hwb_register_default_benches(&reg);
-  if (reg.count < 24) {
-    puts("expected at least 24 benchmarks");
+  if (reg.count < 27) {
+    puts("expected at least 27 benchmarks");
     return 1;
   }
 
@@ -81,6 +81,25 @@ int test_registry(void) {
   const hwb_benchmark_desc* storage_rand4k_write = hwb_registry_find(&reg, "storage.rand4k_write");
   if (!storage_rand4k_write || !storage_rand4k_write->run) {
     puts("missing storage.rand4k_write run callback");
+    return 1;
+  }
+
+
+  const hwb_benchmark_desc* gpu_vec_add = hwb_registry_find(&reg, "gpu.compute.fp32_vec_add");
+  if (!gpu_vec_add || !gpu_vec_add->run) {
+    puts("missing gpu.compute.fp32_vec_add run callback");
+    return 1;
+  }
+
+  const hwb_benchmark_desc* gpu_fma = hwb_registry_find(&reg, "gpu.compute.fp32_fma");
+  if (!gpu_fma || !gpu_fma->run) {
+    puts("missing gpu.compute.fp32_fma run callback");
+    return 1;
+  }
+
+  const hwb_benchmark_desc* gpu_i32 = hwb_registry_find(&reg, "gpu.compute.i32_mad");
+  if (!gpu_i32 || !gpu_i32->run) {
+    puts("missing gpu.compute.i32_mad run callback");
     return 1;
   }
 

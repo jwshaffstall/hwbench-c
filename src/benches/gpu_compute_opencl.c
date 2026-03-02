@@ -25,9 +25,9 @@ typedef struct hwb_opencl_env {
 } hwb_opencl_env;
 
 static const char* hwb_opencl_kernel_source =
-  "__kernel void vec_add(__global const float* a, __global const float* b, __global float* c) {"
+  "__kernel void vec_add(__global const float* a, __global const float* b, __global float* out) {"
   "  size_t i = get_global_id(0);"
-  "  c[i] = a[i] + b[i];"
+  "  out[i] = a[i] + b[i];"
   "}"
   "__kernel void fma3(__global const float* a, __global const float* b, __global const float* c, __global float* out) {"
   "  size_t i = get_global_id(0);"
@@ -47,7 +47,7 @@ static int hwb_opencl_init(hwb_opencl_env* env) {
 
   err = clGetPlatformIDs(8, platforms, &platform_count);
   if (err != CL_SUCCESS || platform_count == 0) {
-    return -1;
+    goto fail;
   }
 
   for (cl_uint i = 0; i < platform_count; ++i) {
@@ -60,30 +60,35 @@ static int hwb_opencl_init(hwb_opencl_env* env) {
   }
 
   if (!env->device) {
-    return -1;
+    goto fail;
   }
 
   env->context = clCreateContext(NULL, 1, &env->device, NULL, NULL, &err);
   if (!env->context || err != CL_SUCCESS) {
-    return -1;
+    goto fail;
   }
 
   env->queue = clCreateCommandQueue(env->context, env->device, 0, &err);
   if (!env->queue || err != CL_SUCCESS) {
-    return -1;
+    goto fail;
   }
 
   env->program = clCreateProgramWithSource(env->context, 1, &hwb_opencl_kernel_source, NULL, &err);
   if (!env->program || err != CL_SUCCESS) {
-    return -1;
+    goto fail;
   }
 
   err = clBuildProgram(env->program, 1, &env->device, NULL, NULL, NULL);
   if (err != CL_SUCCESS) {
-    return -1;
+    goto fail;
   }
 
   return 0;
+
+fail:
+  hwb_opencl_shutdown(env);
+  memset(env, 0, sizeof(*env));
+  return -1;
 }
 
 static void hwb_opencl_shutdown(hwb_opencl_env* env) {
@@ -100,21 +105,33 @@ static void hwb_opencl_shutdown(hwb_opencl_env* env) {
 
 static bool gpu_compute_supported(const hwb_context* ctx) {
   (void)ctx;
-  hwb_opencl_env env;
-  int rc = hwb_opencl_init(&env);
-  if (rc == 0) {
-    hwb_opencl_shutdown(&env);
-    return true;
+  cl_int err = CL_SUCCESS;
+  cl_uint platform_count = 0;
+  cl_platform_id platforms[8];
+
+  err = clGetPlatformIDs(8, platforms, &platform_count);
+  if (err != CL_SUCCESS || platform_count == 0) {
+    return false;
   }
+
+  for (cl_uint i = 0; i < platform_count; ++i) {
+    cl_device_id device = NULL;
+    err = clGetDeviceIDs(platforms[i], CL_DEVICE_TYPE_GPU, 1, &device, NULL);
+    if (err == CL_SUCCESS && device) {
+      return true;
+    }
+  }
+
   return false;
 }
 
-static int run_float3_kernel(const hwb_context* ctx,
-                             hwb_benchmark_result* out,
-                             const char* id,
-                             const char* variant,
-                             const char* kernel_name,
-                             double flops_per_elem) {
+static int run_float_kernel(const hwb_context* ctx,
+                            hwb_benchmark_result* out,
+                            const char* id,
+                            const char* variant,
+                            const char* kernel_name,
+                            bool use_c_input,
+                            double flops_per_elem) {
   hwb_opencl_env env;
   cl_int err = CL_SUCCESS;
   cl_mem buf_a = NULL;
@@ -142,8 +159,10 @@ static int run_float3_kernel(const hwb_context* ctx,
 
   a = (float*)malloc(HWB_GPU_ELEMS * sizeof(float));
   b = (float*)malloc(HWB_GPU_ELEMS * sizeof(float));
-  c = (float*)malloc(HWB_GPU_ELEMS * sizeof(float));
-  if (!a || !b || !c) {
+  if (use_c_input) {
+    c = (float*)malloc(HWB_GPU_ELEMS * sizeof(float));
+  }
+  if (!a || !b || (use_c_input && !c)) {
     rc = -1;
     goto cleanup;
   }
@@ -151,7 +170,9 @@ static int run_float3_kernel(const hwb_context* ctx,
   for (size_t i = 0; i < HWB_GPU_ELEMS; ++i) {
     a[i] = (float)(i % 1024) * 0.001f;
     b[i] = (float)(i % 251) * 0.002f;
-    c[i] = (float)(i % 127) * 0.003f;
+    if (use_c_input) {
+      c[i] = (float)(i % 127) * 0.003f;
+    }
   }
 
   buf_a = clCreateBuffer(env.context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
@@ -160,9 +181,11 @@ static int run_float3_kernel(const hwb_context* ctx,
   buf_b = clCreateBuffer(env.context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
                          HWB_GPU_ELEMS * sizeof(float), b, &err);
   if (!buf_b || err != CL_SUCCESS) goto cleanup;
-  buf_c = clCreateBuffer(env.context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
-                         HWB_GPU_ELEMS * sizeof(float), c, &err);
-  if (!buf_c || err != CL_SUCCESS) goto cleanup;
+  if (use_c_input) {
+    buf_c = clCreateBuffer(env.context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+                           HWB_GPU_ELEMS * sizeof(float), c, &err);
+    if (!buf_c || err != CL_SUCCESS) goto cleanup;
+  }
   buf_out = clCreateBuffer(env.context, CL_MEM_WRITE_ONLY,
                            HWB_GPU_ELEMS * sizeof(float), NULL, &err);
   if (!buf_out || err != CL_SUCCESS) goto cleanup;
@@ -170,13 +193,16 @@ static int run_float3_kernel(const hwb_context* ctx,
   kernel = clCreateKernel(env.program, kernel_name, &err);
   if (!kernel || err != CL_SUCCESS) goto cleanup;
 
-  err = clSetKernelArg(kernel, 0, sizeof(cl_mem), &buf_a);
+  unsigned arg_index = 0;
+  err = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), &buf_a);
   if (err != CL_SUCCESS) goto cleanup;
-  err = clSetKernelArg(kernel, 1, sizeof(cl_mem), &buf_b);
+  err = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), &buf_b);
   if (err != CL_SUCCESS) goto cleanup;
-  err = clSetKernelArg(kernel, 2, sizeof(cl_mem), &buf_c);
-  if (err != CL_SUCCESS) goto cleanup;
-  err = clSetKernelArg(kernel, 3, sizeof(cl_mem), &buf_out);
+  if (use_c_input) {
+    err = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), &buf_c);
+    if (err != CL_SUCCESS) goto cleanup;
+  }
+  err = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), &buf_out);
   if (err != CL_SUCCESS) goto cleanup;
 
   size_t global = HWB_GPU_ELEMS;
@@ -219,19 +245,21 @@ cleanup:
 }
 
 static int gpu_vec_add_run(const hwb_context* ctx, hwb_benchmark_result* out) {
-  return run_float3_kernel(ctx, out,
-                           "gpu.compute.fp32_vec_add",
-                           "opencl",
-                           "vec_add",
-                           1.0);
+  return run_float_kernel(ctx, out,
+                          "gpu.compute.fp32_vec_add",
+                          "opencl",
+                          "vec_add",
+                          false,
+                          1.0);
 }
 
 static int gpu_fma_run(const hwb_context* ctx, hwb_benchmark_result* out) {
-  return run_float3_kernel(ctx, out,
-                           "gpu.compute.fp32_fma",
-                           "opencl",
-                           "fma3",
-                           2.0);
+  return run_float_kernel(ctx, out,
+                          "gpu.compute.fp32_fma",
+                          "opencl",
+                          "fma3",
+                          true,
+                          2.0);
 }
 
 static int gpu_int_mad_run(const hwb_context* ctx, hwb_benchmark_result* out) {

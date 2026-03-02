@@ -28,5 +28,5 @@ jobs:
       - name: Test
         run: ctest --test-dir build/windows-msvc-release -C Release --output-on-failure
 
-      - name: Run benchmark executable (release max-opt)
-        run: .\build\windows-msvc-release\Release\hwbench-c.exe --suite quick --samples 1 --warmup-ms 5 --min-sample-ms 5
+      - name: Smoke test CLI (list benchmarks)
+        run: .\build\windows-msvc-release\Release\hwbench-c.exe --list

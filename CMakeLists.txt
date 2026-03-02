@@ -23,12 +23,13 @@ option(HWB_USE_JPEG_TURBO "Enable libjpeg-turbo benchmarks" OFF)
 option(HWB_USE_CLPEAK "Enable clpeak adapter" OFF)
 option(HWB_USE_VKPEAK "Enable vkpeak adapter" OFF)
 option(HWB_USE_DAWN "Enable Dawn/WebGPU backend" OFF)
-option(HWB_FETCH_OPENCL "Fetch OpenCL headers/loader if system OpenCL is unavailable" ON)
+option(HWB_FETCH_OPENCL "Fetch OpenCL headers/loader if system OpenCL is unavailable" OFF)
 set(HWB_OPENCL_HEADERS_TAG "v2025.07.22" CACHE STRING "Git tag for OpenCL-Headers")
 set(HWB_OPENCL_ICD_LOADER_TAG "v2025.07.22" CACHE STRING "Git tag for OpenCL-ICD-Loader")
 
 find_package(OpenCL QUIET)
-if(NOT OpenCL_FOUND AND HWB_FETCH_OPENCL)
+if(NOT OpenCL_FOUND AND HWB_BUILD_COMPUTE AND HWB_FETCH_OPENCL)
+  message(STATUS "OpenCL not found: fetching OpenCL headers and ICD loader (set HWB_FETCH_OPENCL=OFF to skip).")
   FetchContent_Declare(
     opencl_headers
     GIT_REPOSITORY https://github.com/KhronosGroup/OpenCL-Headers.git

@@ -3,3 +3,5 @@
 /_codeql_detected_source_root
 *.json
 !CMakePresets.json
+
+.idea/

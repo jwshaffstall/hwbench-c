@@ -24,6 +24,8 @@ typedef struct hwb_opencl_env {
   cl_program program;
 } hwb_opencl_env;
 
+static void hwb_opencl_shutdown(hwb_opencl_env* env);
+
 static const char* hwb_opencl_kernel_source =
   "__kernel void vec_add(__global const float* a, __global const float* b, __global float* out) {"
   "  size_t i = get_global_id(0);"

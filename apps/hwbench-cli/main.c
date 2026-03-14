@@ -2,6 +2,7 @@
 #include "hwbench/benches.h"
 #include "hwbench/json.h"
 #include "hwbench/system.h"
+#include "hwbench/stress.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -12,6 +13,7 @@ static void print_usage(void) {
        "  --list\n"
        "  --suite quick|cpu|memory|storage|gpu|cpu,memory,storage,gpu\n"
        "  --bench <id>\n"
+       "  --stress 10|30|60\n"
        "  --samples <n>\n"
        "  --warmup-ms <ms>\n"
        "  --min-sample-ms <ms>\n"
@@ -56,7 +58,10 @@ int main(int argc, char** argv) {
   int run_memory_suite = 0;
   int run_storage_suite = 0;
   int run_gpu_suite = 0;
+  int run_stress = 0;
+  int stress_seconds = 0;
   const char* out_path = "hwbench-results.json";
+  int threads_set = 0;
 
   for (int i = 1; i < argc; ++i) {
     if (strcmp(argv[i], "--list") == 0) {
@@ -109,6 +114,13 @@ int main(int argc, char** argv) {
       }
     } else if (strcmp(argv[i], "--bench") == 0 && i + 1 < argc) {
       bench_id = argv[++i];
+    } else if (strcmp(argv[i], "--stress") == 0 && i + 1 < argc) {
+      stress_seconds = atoi(argv[++i]);
+      if (stress_seconds != 10 && stress_seconds != 30 && stress_seconds != 60) {
+        print_usage();
+        return 1;
+      }
+      run_stress = 1;
     } else if (strcmp(argv[i], "--samples") == 0 && i + 1 < argc) {
       ctx.samples = atoi(argv[++i]);
     } else if (strcmp(argv[i], "--warmup-ms") == 0 && i + 1 < argc) {
@@ -117,6 +129,7 @@ int main(int argc, char** argv) {
       ctx.min_sample_ms = atoi(argv[++i]);
     } else if (strcmp(argv[i], "--threads") == 0 && i + 1 < argc) {
       ctx.threads = atoi(argv[++i]);
+      threads_set = 1;
     } else if (strcmp(argv[i], "--out") == 0 && i + 1 < argc) {
       out_path = argv[++i];
     } else {
@@ -133,7 +146,12 @@ int main(int argc, char** argv) {
     return 0;
   }
 
-  size_t max_results = registry.count > 0 ? registry.count : 1;
+  if (run_stress && (bench_id || run_quick || run_cpu_suite || run_memory_suite || run_storage_suite || run_gpu_suite)) {
+    print_usage();
+    return 1;
+  }
+
+  size_t max_results = run_stress ? 2 : (registry.count > 0 ? registry.count : 1);
   hwb_benchmark_result* results = malloc(max_results * sizeof(hwb_benchmark_result));
   if (!results) {
     fprintf(stderr, "Out of memory\n");
@@ -142,7 +160,34 @@ int main(int argc, char** argv) {
   size_t result_count = 0;
   int printed_header = 0;
 
-  if (bench_id) {
+  if (run_stress) {
+    int cpu_threads = threads_set ? ctx.threads : 0;
+    int rc = hwb_run_cpu_stress(stress_seconds, cpu_threads, &results[result_count]);
+    if (rc != 0) {
+      fprintf(stderr, "CPU stress run failed\n");
+      free(results);
+      return 3;
+    }
+    result_count++;
+    if (!printed_header) {
+      print_hardware_report();
+      print_result_header();
+      printed_header = 1;
+    }
+    print_result_row(&results[result_count - 1]);
+
+    rc = hwb_run_gpu_stress(stress_seconds, &results[result_count]);
+    if (rc == 0) {
+      result_count++;
+      print_result_row(&results[result_count - 1]);
+    } else if (rc != -2) {
+      fprintf(stderr, "GPU stress run failed\n");
+      free(results);
+      return 3;
+    } else {
+      printf("GPU stress unsupported on this host.\n");
+    }
+  } else if (bench_id) {
     const hwb_benchmark_desc* b = hwb_registry_find(&registry, bench_id);
     if (!b) {
       fprintf(stderr, "Unknown benchmark id: %s\n", bench_id);

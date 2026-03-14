@@ -132,7 +132,7 @@ int hwb_run_cpu_stress(int seconds, int max_threads, hwb_benchmark_result* out) 
     return -1;
   }
 
-  atomic_bool stop_flag = ATOMIC_VAR_INIT(false);
+  atomic_bool stop_flag = false;
   for (int i = 0; i < threads; ++i) {
     tasks[i].stop_flag = &stop_flag;
 #if defined(_WIN32)

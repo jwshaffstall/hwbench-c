@@ -16,11 +16,14 @@ jobs:
       - name: Setup Ninja
         uses: seanmiddleditch/gha-setup-ninja@v4
 
-      - name: Configure
-        run: cmake --preset linux-gcc-release
+      - name: Configure (release + max optimizations)
+        run: cmake --preset linux-gcc-release -D CMAKE_C_FLAGS_RELEASE="-O3 -DNDEBUG -march=native"
 
       - name: Build
         run: cmake --build --preset linux-gcc-release
 
       - name: Test
         run: ctest --preset linux-gcc-release
+
+      - name: Smoke test CLI (list benchmarks)
+        run: ./build/linux-gcc-release/hwbench-c --list

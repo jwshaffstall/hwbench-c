@@ -16,11 +16,14 @@ jobs:
       - name: Setup Ninja
         uses: seanmiddleditch/gha-setup-ninja@v4
 
-      - name: Configure
-        run: cmake --preset macos-clang-release
+      - name: Configure (release + max optimizations)
+        run: cmake --preset macos-clang-release -D CMAKE_C_FLAGS_RELEASE="-O3 -DNDEBUG -march=native"
 
       - name: Build
         run: cmake --build build/macos-clang-release
 
       - name: Test
         run: ctest --test-dir build/macos-clang-release --output-on-failure
+
+      - name: Smoke test CLI (list benchmarks)
+        run: ./build/macos-clang-release/hwbench-c --list

@@ -2,6 +2,7 @@
 #include "hwbench/benches.h"
 #include "hwbench/json.h"
 #include "hwbench/system.h"
+#include "hwbench/stress.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -10,8 +11,9 @@
 static void print_usage(void) {
   puts("hwbench-c options:\n"
        "  --list\n"
-       "  --suite quick|cpu|memory|storage|cpu,memory,storage\n"
+       "  --suite quick|cpu|memory|storage|gpu|cpu,memory,storage,gpu\n"
        "  --bench <id>\n"
+       "  --stress 10|30|60\n"
        "  --samples <n>\n"
        "  --warmup-ms <ms>\n"
        "  --min-sample-ms <ms>\n"
@@ -19,6 +21,15 @@ static void print_usage(void) {
        "  --out <path>");
 }
 
+
+static void print_result_header(void) {
+  puts("BENCHMARK	VARIANT	THREADS	MEDIAN	UNIT	CV%");
+}
+
+static void print_result_row(const hwb_benchmark_result* r) {
+  printf("%s	%s	%d	%.3f	%s	%.2f\n",
+         r->id, r->variant, r->threads, r->summary.median, r->unit, r->summary.cv);
+}
 
 static void print_hardware_report(void) {
   hwb_hardware_info hw;
@@ -46,7 +57,11 @@ int main(int argc, char** argv) {
   int run_cpu_suite = 0;
   int run_memory_suite = 0;
   int run_storage_suite = 0;
+  int run_gpu_suite = 0;
+  int run_stress = 0;
+  int stress_seconds = 0;
   const char* out_path = "hwbench-results.json";
+  int threads_set = 0;
 
   for (int i = 1; i < argc; ++i) {
     if (strcmp(argv[i], "--list") == 0) {
@@ -80,6 +95,8 @@ int main(int argc, char** argv) {
             run_memory_suite = 1;
           } else if (len == 7 && strncmp(token_start, "storage", 7) == 0) {
             run_storage_suite = 1;
+          } else if (len == 3 && strncmp(token_start, "gpu", 3) == 0) {
+            run_gpu_suite = 1;
           } else {
             print_usage();
             return 1;
@@ -90,13 +107,20 @@ int main(int argc, char** argv) {
           }
           break;
         }
-        if (!(run_cpu_suite || run_memory_suite || run_storage_suite)) {
+        if (!(run_cpu_suite || run_memory_suite || run_storage_suite || run_gpu_suite)) {
           print_usage();
           return 1;
         }
       }
     } else if (strcmp(argv[i], "--bench") == 0 && i + 1 < argc) {
       bench_id = argv[++i];
+    } else if (strcmp(argv[i], "--stress") == 0 && i + 1 < argc) {
+      stress_seconds = atoi(argv[++i]);
+      if (stress_seconds != 10 && stress_seconds != 30 && stress_seconds != 60) {
+        print_usage();
+        return 1;
+      }
+      run_stress = 1;
     } else if (strcmp(argv[i], "--samples") == 0 && i + 1 < argc) {
       ctx.samples = atoi(argv[++i]);
     } else if (strcmp(argv[i], "--warmup-ms") == 0 && i + 1 < argc) {
@@ -105,6 +129,7 @@ int main(int argc, char** argv) {
       ctx.min_sample_ms = atoi(argv[++i]);
     } else if (strcmp(argv[i], "--threads") == 0 && i + 1 < argc) {
       ctx.threads = atoi(argv[++i]);
+      threads_set = 1;
     } else if (strcmp(argv[i], "--out") == 0 && i + 1 < argc) {
       out_path = argv[++i];
     } else {
@@ -121,15 +146,48 @@ int main(int argc, char** argv) {
     return 0;
   }
 
-  size_t max_results = registry.count > 0 ? registry.count : 1;
+  if (run_stress && (bench_id || run_quick || run_cpu_suite || run_memory_suite || run_storage_suite || run_gpu_suite)) {
+    print_usage();
+    return 1;
+  }
+
+  size_t max_results = run_stress ? 2 : (registry.count > 0 ? registry.count : 1);
   hwb_benchmark_result* results = malloc(max_results * sizeof(hwb_benchmark_result));
   if (!results) {
     fprintf(stderr, "Out of memory\n");
     return 1;
   }
   size_t result_count = 0;
+  int printed_header = 0;
 
-  if (bench_id) {
+  if (run_stress) {
+    int cpu_threads = threads_set ? ctx.threads : 0;
+    int rc = hwb_run_cpu_stress(stress_seconds, cpu_threads, &results[result_count]);
+    if (rc != 0) {
+      fprintf(stderr, "CPU stress run failed\n");
+      free(results);
+      return 3;
+    }
+    result_count++;
+    if (!printed_header) {
+      print_hardware_report();
+      print_result_header();
+      printed_header = 1;
+    }
+    print_result_row(&results[result_count - 1]);
+
+    rc = hwb_run_gpu_stress(stress_seconds, &results[result_count]);
+    if (rc == 0) {
+      result_count++;
+      print_result_row(&results[result_count - 1]);
+    } else if (rc != -2) {
+      fprintf(stderr, "GPU stress run failed\n");
+      free(results);
+      return 3;
+    } else {
+      printf("GPU stress unsupported on this host.\n");
+    }
+  } else if (bench_id) {
     const hwb_benchmark_desc* b = hwb_registry_find(&registry, bench_id);
     if (!b) {
       fprintf(stderr, "Unknown benchmark id: %s\n", bench_id);
@@ -148,17 +206,30 @@ int main(int argc, char** argv) {
       return 3;
     }
     result_count++;
-  } else if (run_quick || argc == 1 || run_cpu_suite || run_memory_suite || run_storage_suite) {
+    if (!printed_header) {
+      print_hardware_report();
+      print_result_header();
+      printed_header = 1;
+    }
+    print_result_row(&results[result_count - 1]);
+  } else if (run_quick || argc == 1 || run_cpu_suite || run_memory_suite || run_storage_suite || run_gpu_suite) {
     for (size_t i = 0; i < registry.count && result_count < max_results; ++i) {
       const hwb_benchmark_desc* b = registry.entries[i];
       int selected = run_quick || argc == 1;
       if (!selected && run_cpu_suite && strcmp(b->category, "cpu") == 0) selected = 1;
       if (!selected && run_memory_suite && strcmp(b->category, "memory") == 0) selected = 1;
       if (!selected && run_storage_suite && strcmp(b->category, "storage") == 0) selected = 1;
+      if (!selected && run_gpu_suite && strcmp(b->category, "gpu") == 0) selected = 1;
       if (!selected) continue;
 
       if (hwb_run_benchmark(&ctx, b, &results[result_count]) == 0) {
         result_count++;
+        if (!printed_header) {
+          print_hardware_report();
+          print_result_header();
+          printed_header = 1;
+        }
+        print_result_row(&results[result_count - 1]);
       }
     }
   } else {
@@ -167,12 +238,9 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  print_hardware_report();
-  puts("BENCHMARK\tVARIANT\tTHREADS\tMEDIAN\tUNIT\tCV%");
-  for (size_t i = 0; i < result_count; ++i) {
-    hwb_benchmark_result* r = &results[i];
-    printf("%s\t%s\t%d\t%.3f\t%s\t%.2f\n",
-           r->id, r->variant, r->threads, r->summary.median, r->unit, r->summary.cv);
+  if (!printed_header) {
+    print_hardware_report();
+    print_result_header();
   }
 
   if (hwb_write_json_results(out_path, results, result_count, "0.1.0", "local-run") != 0) {

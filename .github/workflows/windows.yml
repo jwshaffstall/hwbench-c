@@ -19,11 +19,14 @@ jobs:
       - name: Setup Ninja
         uses: seanmiddleditch/gha-setup-ninja@v4
 
-      - name: Configure
-        run: cmake --preset windows-msvc-release
+      - name: Configure (release + max optimizations)
+        run: cmake --preset windows-msvc-release -D CMAKE_C_FLAGS_RELEASE="/O2 /DNDEBUG /GL"
 
       - name: Build
         run: cmake --build build/windows-msvc-release --config Release
 
       - name: Test
         run: ctest --test-dir build/windows-msvc-release -C Release --output-on-failure
+
+      - name: Smoke test CLI (list benchmarks)
+        run: .\build\windows-msvc-release\Release\hwbench-c.exe --list

@@ -19,12 +19,12 @@
   - `memory.stream.triad`
   - `memory.latency.pointer_chase`
   - `storage.seq_read`
-- `storage.seq_write`
-- `storage.rand4k_read`
-- `storage.rand4k_write`
-- `gpu.compute.fp32_vec_add`
-- `gpu.compute.fp32_fma`
-- `gpu.compute.i32_mad`
+  - `storage.seq_write`
+  - `storage.rand4k_read`
+  - `storage.rand4k_write`
+  - `gpu.compute.fp32_vec_add`
+  - `gpu.compute.fp32_fma`
+  - `gpu.compute.i32_mad`
 - Unit/smoke tests via CTest.
 
 ## Pragmatic deviations from spec

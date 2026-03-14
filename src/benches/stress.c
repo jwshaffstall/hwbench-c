@@ -4,6 +4,7 @@
 #include "hwbench/system.h"
 #include "hwbench/timer.h"
 
+#include <stdatomic.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -17,6 +18,7 @@ typedef HANDLE hwb_thread_t;
 #include <sched.h>
 #include <time.h>
 typedef pthread_t hwb_thread_t;
+extern int nanosleep(const struct timespec*, struct timespec*);
 #endif
 
 #define HWB_STRESS_MAX_THREADS 32
@@ -59,17 +61,24 @@ static void hwb_stress_yield(void) {
 }
 
 static void hwb_stress_sleep_briefly(void) {
-  hwb_stress_yield();
+#if defined(_WIN32)
+  Sleep(1);
+#else
+  struct timespec ts;
+  ts.tv_sec = 0;
+  ts.tv_nsec = 1000000; /* 1ms */
+  nanosleep(&ts, NULL);
+#endif
 }
 
 typedef struct hwb_stress_cpu_task {
-  volatile int* stop_flag;
+  atomic_bool* stop_flag;
   uint64_t iterations;
 } hwb_stress_cpu_task;
 
 static void hwb_stress_cpu_worker(hwb_stress_cpu_task* task) {
   volatile uint64_t acc = 1;
-  while (!*(task->stop_flag)) {
+  while (!atomic_load(task->stop_flag)) {
     for (int i = 0; i < HWB_STRESS_CHUNK; ++i) {
       acc = acc * 1664525u + 1013904223u;
     }
@@ -123,13 +132,13 @@ int hwb_run_cpu_stress(int seconds, int max_threads, hwb_benchmark_result* out) 
     return -1;
   }
 
-  volatile int stop_flag = 0;
+  atomic_bool stop_flag = ATOMIC_VAR_INIT(false);
   for (int i = 0; i < threads; ++i) {
     tasks[i].stop_flag = &stop_flag;
 #if defined(_WIN32)
     workers[i] = CreateThread(NULL, 0, hwb_stress_cpu_worker_win, &tasks[i], 0, NULL);
     if (workers[i] == NULL) {
-      stop_flag = 1;
+      atomic_store(&stop_flag, true);
       for (int j = 0; j < i; ++j) {
         WaitForSingleObject(workers[j], INFINITE);
         CloseHandle(workers[j]);
@@ -140,7 +149,7 @@ int hwb_run_cpu_stress(int seconds, int max_threads, hwb_benchmark_result* out) 
     }
 #else
     if (pthread_create(&workers[i], NULL, hwb_stress_cpu_worker_posix, &tasks[i]) != 0) {
-      stop_flag = 1;
+      atomic_store(&stop_flag, true);
       for (int j = 0; j < i; ++j) {
         (void)pthread_join(workers[j], NULL);
       }
@@ -156,7 +165,7 @@ int hwb_run_cpu_stress(int seconds, int max_threads, hwb_benchmark_result* out) 
   while (hwb_now_seconds() < end_time) {
     hwb_stress_sleep_briefly();
   }
-  stop_flag = 1;
+  atomic_store(&stop_flag, true);
 
   for (int i = 0; i < threads; ++i) {
 #if defined(_WIN32)

@@ -5,8 +5,6 @@
 #include <string.h>
 
 #if defined(_WIN32)
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
 static void hwb_set_stress_override(const char* value) {
   (void)_putenv_s("HWB_STRESS_SECONDS_OVERRIDE", value);
 }

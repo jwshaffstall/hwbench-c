@@ -29,8 +29,8 @@ cmake --build "%BUILD%" --config Release || exit /b 1
 set "EXE=%BUILD%\Release\hwbench-c.exe"
 if not exist "%EXE%" set "EXE=%BUILD%\hwbench-c.exe"
 
-set "CMD=%EXE% --stress %DURATION% --out %OUT%"
-if defined HWB_STRESS_THREADS set "CMD=%CMD% --threads %HWB_STRESS_THREADS%"
+set "THREAD_ARGS="
+if defined HWB_STRESS_THREADS set "THREAD_ARGS=--threads %HWB_STRESS_THREADS%"
 
 echo Running stress mode for %DURATION%s via %EXE%
-%CMD% || exit /b 1
+"%EXE%" --stress %DURATION% --out "%OUT%" %THREAD_ARGS% || exit /b 1

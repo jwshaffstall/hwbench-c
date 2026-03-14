@@ -97,6 +97,7 @@ add_library(hwbench_benches ${HWB_LIB_TYPE}
   src/benches/storage_rand4k_read.c
   src/benches/storage_rand4k_write.c
   src/benches/gpu_compute_opencl.c
+  src/benches/stress.c
   src/benches/register.c
 )
 target_include_directories(hwbench_benches PUBLIC include)
@@ -117,6 +118,7 @@ if(HWB_BUILD_TESTS)
     tests/unit/test_system.c
     tests/unit/test_system_linux_parse.c
     tests/unit/test_bench_execution.c
+    tests/unit/test_stress.c
   )
   target_link_libraries(hwbench-tests PRIVATE hwbench_core hwbench_benches)
   add_test(NAME hwbench-tests COMMAND hwbench-tests)
@@ -126,4 +128,5 @@ if(HWB_BUILD_TESTS)
   add_test(NAME hwbench-smoke-suite-cpu-memory COMMAND hwbench-c --suite cpu,memory --samples 1 --warmup-ms 5 --min-sample-ms 5)
   add_test(NAME hwbench-smoke-suite-invalid COMMAND hwbench-c --suite cpu,,memory)
   set_tests_properties(hwbench-smoke-suite-invalid PROPERTIES WILL_FAIL TRUE)
+  add_test(NAME hwbench-smoke-stress COMMAND ${CMAKE_COMMAND} -E env HWB_STRESS_SECONDS_OVERRIDE=1 $<TARGET_FILE:hwbench-c> --stress 10 --threads 2 --out hwbench-stress.json)
 endif()

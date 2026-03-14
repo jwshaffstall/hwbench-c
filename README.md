@@ -19,9 +19,12 @@
   - `memory.stream.triad`
   - `memory.latency.pointer_chase`
   - `storage.seq_read`
-  - `storage.seq_write`
-  - `storage.rand4k_read`
-  - `storage.rand4k_write`
+- `storage.seq_write`
+- `storage.rand4k_read`
+- `storage.rand4k_write`
+- `gpu.compute.fp32_vec_add`
+- `gpu.compute.fp32_fma`
+- `gpu.compute.i32_mad`
 - Unit/smoke tests via CTest.
 
 ## Pragmatic deviations from spec
@@ -40,6 +43,7 @@ cmake --build --preset linux-gcc-release
 ctest --preset linux-gcc-release
 ./build/linux-gcc-release/hwbench-c --suite quick --out results.json
 ./build/linux-gcc-release/hwbench-c --list
+./build/linux-gcc-release/hwbench-c --stress 30
 ```
 
 
@@ -64,16 +68,19 @@ The `scripts/` folder includes setup/build/test/run helpers for Bash (`.sh`), Wi
   - `./scripts/build.sh`
   - `./scripts/test.sh`
   - `./scripts/run.sh [output.json]`
+  - `./scripts/stress.sh [10|30|60] [output.json]`
 - Cmd.exe
   - `scripts\setup.bat`
   - `scripts\build.bat`
   - `scripts\test.bat`
   - `scripts\run.bat [output.json]`
+  - `scripts\stress.bat [10|30|60] [output.json]`
 - PowerShell
   - `./scripts/setup.ps1`
   - `./scripts/build.ps1`
   - `./scripts/test.ps1`
   - `./scripts/run.ps1 [-OutPath output.json]`
+  - `./scripts/stress.ps1 [-Duration 10|30|60] [-OutPath output.json]`
 
 By default each script auto-selects a preset based on the host OS. Override it with the `HWB_PRESET` environment variable.
 

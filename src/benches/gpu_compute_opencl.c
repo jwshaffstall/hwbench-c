@@ -1,9 +1,16 @@
 #include "hwbench/bench.h"
+#include "hwbench/stress.h"
 #include "hwbench/stats.h"
 #include "hwbench/timer.h"
 
 #include <stdlib.h>
 #include <string.h>
+#if defined(_WIN32)
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#else
+#include <sched.h>
+#endif
 
 #if defined(HWB_HAVE_OPENCL)
 #if !defined(CL_TARGET_OPENCL_VERSION)
@@ -16,6 +23,7 @@
 #endif
 
 #define HWB_GPU_ELEMS (1u << 22)
+#define HWB_GPU_STRESS_ELEMS (1u << 20)
 
 typedef struct hwb_opencl_env {
   cl_context context;
@@ -103,6 +111,7 @@ static void hwb_opencl_shutdown(hwb_opencl_env* env) {
   if (env->context) {
     clReleaseContext(env->context);
   }
+  memset(env, 0, sizeof(*env));
 }
 
 static bool gpu_compute_supported(const hwb_context* ctx) {
@@ -364,6 +373,117 @@ cleanup:
   return rc;
 }
 
+int hwb_run_gpu_stress(int seconds, hwb_benchmark_result* out) {
+  if (!out) {
+    return -1;
+  }
+
+  int duration = hwb_stress_resolve_seconds(seconds);
+  if (duration <= 0) {
+    return -1;
+  }
+
+  hwb_opencl_env env;
+  cl_int err = CL_SUCCESS;
+  cl_mem buf_a = NULL;
+  cl_mem buf_b = NULL;
+  cl_mem buf_c = NULL;
+  cl_mem buf_out = NULL;
+  cl_kernel kernel = NULL;
+  float* a = NULL;
+  float* b = NULL;
+  float* c = NULL;
+  int rc = -1;
+
+  memset(out, 0, sizeof(*out));
+  out->id = "stress.gpu";
+  out->category = "stress";
+  out->variant = "opencl";
+  out->unit = "GFLOP/s";
+  out->threads = 1;
+  out->class_kind = HWB_BENCH_CLASS_SCENARIO;
+  out->synthetic = true;
+
+  if (hwb_opencl_init(&env) != 0) {
+    return -2;
+  }
+
+  a = (float*)malloc(HWB_GPU_STRESS_ELEMS * sizeof(float));
+  b = (float*)malloc(HWB_GPU_STRESS_ELEMS * sizeof(float));
+  c = (float*)malloc(HWB_GPU_STRESS_ELEMS * sizeof(float));
+  if (!a || !b || !c) goto cleanup;
+
+  for (size_t i = 0; i < HWB_GPU_STRESS_ELEMS; ++i) {
+    a[i] = (float)(i % 1024) * 0.001f;
+    b[i] = (float)(i % 251) * 0.002f;
+    c[i] = (float)(i % 127) * 0.003f;
+  }
+
+  buf_a = clCreateBuffer(env.context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+                         HWB_GPU_STRESS_ELEMS * sizeof(float), a, &err);
+  if (!buf_a || err != CL_SUCCESS) goto cleanup;
+  buf_b = clCreateBuffer(env.context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+                         HWB_GPU_STRESS_ELEMS * sizeof(float), b, &err);
+  if (!buf_b || err != CL_SUCCESS) goto cleanup;
+  buf_c = clCreateBuffer(env.context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+                         HWB_GPU_STRESS_ELEMS * sizeof(float), c, &err);
+  if (!buf_c || err != CL_SUCCESS) goto cleanup;
+  buf_out = clCreateBuffer(env.context, CL_MEM_WRITE_ONLY,
+                           HWB_GPU_STRESS_ELEMS * sizeof(float), NULL, &err);
+  if (!buf_out || err != CL_SUCCESS) goto cleanup;
+
+  kernel = clCreateKernel(env.program, "fma3", &err);
+  if (!kernel || err != CL_SUCCESS) goto cleanup;
+
+  err = clSetKernelArg(kernel, 0, sizeof(cl_mem), &buf_a);
+  if (err != CL_SUCCESS) goto cleanup;
+  err = clSetKernelArg(kernel, 1, sizeof(cl_mem), &buf_b);
+  if (err != CL_SUCCESS) goto cleanup;
+  err = clSetKernelArg(kernel, 2, sizeof(cl_mem), &buf_c);
+  if (err != CL_SUCCESS) goto cleanup;
+  err = clSetKernelArg(kernel, 3, sizeof(cl_mem), &buf_out);
+  if (err != CL_SUCCESS) goto cleanup;
+
+  size_t global = HWB_GPU_STRESS_ELEMS;
+  double start = hwb_now_seconds();
+  double end_time = start + (double)duration;
+  double flops_accum = 0.0;
+
+  while (hwb_now_seconds() < end_time) {
+    err = clEnqueueNDRangeKernel(env.queue, kernel, 1, NULL, &global, NULL, 0, NULL, NULL);
+    if (err != CL_SUCCESS) goto cleanup;
+    err = clFinish(env.queue);
+    if (err != CL_SUCCESS) goto cleanup;
+    flops_accum += ((double)HWB_GPU_STRESS_ELEMS * 2.0);
+#if defined(_WIN32)
+    SwitchToThread();
+#else
+    sched_yield();
+#endif
+  }
+
+  double elapsed = hwb_now_seconds() - start;
+  if (elapsed <= 0.0) goto cleanup;
+
+  out->samples[out->sample_count++] = (flops_accum / elapsed) / 1e9;
+  out->measured_ms = elapsed * 1000.0;
+  out->warmup_ms = 0.0;
+
+  rc = hwb_compute_stats(out->samples, out->sample_count, &out->summary);
+
+cleanup:
+  if (kernel) clReleaseKernel(kernel);
+  if (buf_out) clReleaseMemObject(buf_out);
+  if (buf_c) clReleaseMemObject(buf_c);
+  if (buf_b) clReleaseMemObject(buf_b);
+  if (buf_a) clReleaseMemObject(buf_a);
+  free(c);
+  free(b);
+  free(a);
+  hwb_opencl_shutdown(&env);
+  return rc;
+}
+
 #else
 
 static bool gpu_compute_supported(const hwb_context* ctx) {
@@ -385,6 +505,12 @@ static int gpu_fma_run(const hwb_context* ctx, hwb_benchmark_result* out) {
 
 static int gpu_int_mad_run(const hwb_context* ctx, hwb_benchmark_result* out) {
   (void)ctx;
+  (void)out;
+  return -2;
+}
+
+int hwb_run_gpu_stress(int seconds, hwb_benchmark_result* out) {
+  (void)seconds;
   (void)out;
   return -2;
 }

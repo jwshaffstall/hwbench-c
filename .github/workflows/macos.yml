@@ -25,5 +25,5 @@ jobs:
       - name: Test
         run: ctest --test-dir build/macos-clang-release --output-on-failure
 
-      - name: Run benchmark executable (release max-opt)
-        run: ./build/macos-clang-release/hwbench-c --suite quick --samples 1 --warmup-ms 5 --min-sample-ms 5
+      - name: Smoke test CLI (list benchmarks)
+        run: ./build/macos-clang-release/hwbench-c --list

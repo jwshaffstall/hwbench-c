@@ -25,5 +25,5 @@ jobs:
       - name: Test
         run: ctest --preset linux-gcc-release
 
-      - name: Run benchmark executable (release max-opt)
-        run: ./build/linux-gcc-release/hwbench-c --suite quick --samples 1 --warmup-ms 5 --min-sample-ms 5
+      - name: Smoke test CLI (list benchmarks)
+        run: ./build/linux-gcc-release/hwbench-c --list

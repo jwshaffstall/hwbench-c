@@ -1,0 +1,5 @@
+---
+Checks: 'clang-diagnostic-*,clang-analyzer-*,bugprone-*,performance-*,portability-*,readability-*,-readability-magic-numbers,-readability-braces-around-statements,-readability-named-parameter,-readability-identifier-length'
+WarningsAsErrors: ''
+HeaderFilterRegex: '.*'
+...

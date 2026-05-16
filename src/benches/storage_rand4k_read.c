@@ -1,10 +1,15 @@
 #include "hwbench/bench.h"
-#include "hwbench/stats.h"
 #include "hwbench/timer.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+typedef struct {
+  FILE* f;
+  unsigned char* page;
+  size_t pages;
+} storage_rand4k_read_state;
 
 static bool storage_rand4k_read_supported(const hwb_context* ctx) {
   (void)ctx;
@@ -20,16 +25,22 @@ static int prepare_file(FILE* f, const unsigned char* page, size_t pages) {
   return 0;
 }
 
-static int run_pass(FILE* f, unsigned char* page, size_t pages, double* iops) {
+static int storage_rand4k_read_pass(void* user_data, double* out_value) {
+  storage_rand4k_read_state* st = (storage_rand4k_read_state*)user_data;
   double t0 = hwb_now_seconds();
-  for (size_t i = 0; i < pages; ++i) {
-    size_t idx = (i * 104729U) % pages;
-    if (fseek(f, (long)(idx * 4096), SEEK_SET) != 0) return -1;
-    if (fread(page, 1, 4096, f) != 4096) return -1;
+  for (size_t i = 0; i < st->pages; ++i) {
+    size_t idx = (i * 104729U) % st->pages;
+    if (fseek(st->f, (long)(idx * 4096), SEEK_SET) != 0) return -1;
+    if (fread(st->page, 1, 4096, st->f) != 4096) return -1;
   }
   double t1 = hwb_now_seconds();
-  *iops = (double)pages / (t1 - t0);
+  *out_value = (double)st->pages / (t1 - t0);
   return 0;
+}
+
+static int storage_rand4k_read_warmup(void* user_data) {
+  double ignored;
+  return storage_rand4k_read_pass(user_data, &ignored);
 }
 
 static int storage_rand4k_read_run(const hwb_context* ctx, hwb_benchmark_result* out) {
@@ -68,32 +79,12 @@ static int storage_rand4k_read_run(const hwb_context* ctx, hwb_benchmark_result*
     return -1;
   }
 
-  double warmup_start = hwb_now_seconds();
-  while ((hwb_now_seconds() - warmup_start) * 1000.0 < (double)ctx->warmup_ms) {
-    double ignored = 0.0;
-    if (run_pass(f, page, pages, &ignored) != 0) {
-      fclose(f);
-      free(page);
-      return -1;
-    }
-  }
-  out->warmup_ms = (hwb_now_seconds() - warmup_start) * 1000.0;
-
-  double measured_start = hwb_now_seconds();
-  for (int s = 0; s < ctx->samples && s < HWB_MAX_SAMPLES; ++s) {
-    double iops = 0.0;
-    if (run_pass(f, page, pages, &iops) != 0) {
-      fclose(f);
-      free(page);
-      return -1;
-    }
-    out->samples[out->sample_count++] = iops;
-  }
-  out->measured_ms = (hwb_now_seconds() - measured_start) * 1000.0;
+  storage_rand4k_read_state st = {.f = f, .page = page, .pages = pages};
+  int rc = hwb_run_samples(ctx, storage_rand4k_read_warmup, storage_rand4k_read_pass, &st, out);
 
   fclose(f);
   free(page);
-  return hwb_compute_stats(out->samples, out->sample_count, &out->summary);
+  return rc;
 }
 
 const hwb_benchmark_desc hwb_bench_storage_rand4k_read = {

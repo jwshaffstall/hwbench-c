@@ -59,6 +59,15 @@ typedef struct hwb_benchmark_desc hwb_benchmark_desc;
 typedef bool (*hwb_is_supported_fn)(const hwb_context* ctx);
 typedef int (*hwb_run_fn)(const hwb_context* ctx, hwb_benchmark_result* out);
 
+typedef int (*hwb_bench_warmup_pass_fn)(void* user_data);
+typedef int (*hwb_bench_sample_pass_fn)(void* user_data, double* out_value);
+
+int hwb_run_samples(const hwb_context* ctx,
+                    hwb_bench_warmup_pass_fn warmup_pass,
+                    hwb_bench_sample_pass_fn sample_pass,
+                    void* user_data,
+                    hwb_benchmark_result* out);
+
 struct hwb_benchmark_desc {
   const char* id;
   const char* category;

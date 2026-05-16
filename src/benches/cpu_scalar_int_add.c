@@ -1,13 +1,36 @@
 #include "hwbench/bench.h"
-#include "hwbench/stats.h"
 #include "hwbench/timer.h"
 
 #include <stdint.h>
 #include <string.h>
 
+typedef struct {
+  volatile uint64_t acc;
+  uint64_t iters;
+} cpu_scalar_state;
+
 static bool cpu_scalar_supported(const hwb_context* ctx) {
   (void)ctx;
   return true;
+}
+
+static int cpu_scalar_warmup(void* user_data) {
+  cpu_scalar_state* st = (cpu_scalar_state*)user_data;
+  for (uint64_t i = 0; i < st->iters / 10; ++i) {
+    st->acc += i;
+  }
+  return 0;
+}
+
+static int cpu_scalar_sample(void* user_data, double* out_value) {
+  cpu_scalar_state* st = (cpu_scalar_state*)user_data;
+  double t0 = hwb_now_seconds();
+  for (uint64_t i = 0; i < st->iters; ++i) {
+    st->acc += i;
+  }
+  double t1 = hwb_now_seconds();
+  *out_value = (double)st->iters / (t1 - t0) / 1e6;
+  return 0;
 }
 
 static int cpu_scalar_run(const hwb_context* ctx, hwb_benchmark_result* out) {
@@ -20,31 +43,8 @@ static int cpu_scalar_run(const hwb_context* ctx, hwb_benchmark_result* out) {
   out->class_kind = HWB_BENCH_CLASS_MICRO;
   out->synthetic = true;
 
-  volatile uint64_t acc = 0;
-  const uint64_t iters = 25000000ULL;
-
-  double warmup_start = hwb_now_seconds();
-  while ((hwb_now_seconds() - warmup_start) * 1000.0 < (double)ctx->warmup_ms) {
-    for (uint64_t i = 0; i < iters / 10; ++i) {
-      acc += i;
-    }
-  }
-  out->warmup_ms = (hwb_now_seconds() - warmup_start) * 1000.0;
-
-  double measured_start = hwb_now_seconds();
-  for (int s = 0; s < ctx->samples && s < HWB_MAX_SAMPLES; ++s) {
-    double t0 = hwb_now_seconds();
-    for (uint64_t i = 0; i < iters; ++i) {
-      acc += i;
-    }
-    double t1 = hwb_now_seconds();
-    double ops_sec = (double)iters / (t1 - t0);
-    out->samples[out->sample_count++] = ops_sec / 1e6;
-  }
-  out->measured_ms = (hwb_now_seconds() - measured_start) * 1000.0;
-
-  (void)acc;
-  return hwb_compute_stats(out->samples, out->sample_count, &out->summary);
+  cpu_scalar_state st = {.acc = 0, .iters = 25000000ULL};
+  return hwb_run_samples(ctx, cpu_scalar_warmup, cpu_scalar_sample, &st, out);
 }
 
 const hwb_benchmark_desc hwb_bench_cpu_scalar_int_add = {

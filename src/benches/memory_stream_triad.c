@@ -1,16 +1,43 @@
 #include "hwbench/bench.h"
-#include "hwbench/stats.h"
 #include "hwbench/timer.h"
 
 #include <stdlib.h>
 #include <string.h>
 
-static bool memory_stream_supported(const hwb_context* ctx) {
+typedef struct {
+  double* a;
+  double* b;
+  double* c;
+  size_t n;
+  double scalar;
+  double bytes;
+} stream_triad_state;
+
+static bool memory_stream_triad_supported(const hwb_context* ctx) {
   (void)ctx;
   return true;
 }
 
-static int memory_stream_run(const hwb_context* ctx, hwb_benchmark_result* out) {
+static int stream_triad_warmup(void* user_data) {
+  stream_triad_state* st = (stream_triad_state*)user_data;
+  for (size_t i = 0; i < st->n; ++i) {
+    st->a[i] = st->b[i] + st->scalar * st->c[i];
+  }
+  return 0;
+}
+
+static int stream_triad_sample(void* user_data, double* out_value) {
+  stream_triad_state* st = (stream_triad_state*)user_data;
+  double t0 = hwb_now_seconds();
+  for (size_t i = 0; i < st->n; ++i) {
+    st->a[i] = st->b[i] + st->scalar * st->c[i];
+  }
+  double t1 = hwb_now_seconds();
+  *out_value = (st->bytes / (t1 - t0)) / 1e9;
+  return 0;
+}
+
+static int memory_stream_triad_run(const hwb_context* ctx, hwb_benchmark_result* out) {
   memset(out, 0, sizeof(*out));
   out->id = "memory.stream.triad";
   out->category = "memory";
@@ -35,30 +62,11 @@ static int memory_stream_run(const hwb_context* ctx, hwb_benchmark_result* out) 
     c[i] = 0.5;
   }
 
-  const double scalar = 3.0;
-  double warmup_start = hwb_now_seconds();
-  while ((hwb_now_seconds() - warmup_start) * 1000.0 < (double)ctx->warmup_ms) {
-    for (size_t i = 0; i < n; ++i) {
-      a[i] = b[i] + scalar * c[i];
-    }
-  }
-  out->warmup_ms = (hwb_now_seconds() - warmup_start) * 1000.0;
-
-  double measured_start = hwb_now_seconds();
-  for (int s = 0; s < ctx->samples && s < HWB_MAX_SAMPLES; ++s) {
-    double t0 = hwb_now_seconds();
-    for (size_t i = 0; i < n; ++i) {
-      a[i] = b[i] + scalar * c[i];
-    }
-    double t1 = hwb_now_seconds();
-
-    double bytes = (double)(3 * sizeof(double) * n);
-    out->samples[out->sample_count++] = (bytes / (t1 - t0)) / 1e9;
-  }
-  out->measured_ms = (hwb_now_seconds() - measured_start) * 1000.0;
+  stream_triad_state st = {.a = a, .b = b, .c = c, .n = n, .scalar = 3.0, .bytes = (double)(3 * sizeof(double) * n)};
+  int rc = hwb_run_samples(ctx, stream_triad_warmup, stream_triad_sample, &st, out);
 
   free(a); free(b); free(c);
-  return hwb_compute_stats(out->samples, out->sample_count, &out->summary);
+  return rc;
 }
 
 const hwb_benchmark_desc hwb_bench_memory_stream_triad = {
@@ -69,6 +77,6 @@ const hwb_benchmark_desc hwb_bench_memory_stream_triad = {
   .variant = "scalar",
   .class_kind = HWB_BENCH_CLASS_MICRO,
   .synthetic = true,
-  .is_supported = memory_stream_supported,
-  .run = memory_stream_run,
+  .is_supported = memory_stream_triad_supported,
+  .run = memory_stream_triad_run,
 };

@@ -80,12 +80,20 @@ struct hwb_benchmark_desc {
   hwb_run_fn run;
 };
 
+typedef struct hwb_alias_entry {
+  const char* alias;
+  const char* canonical_id;
+} hwb_alias_entry;
+
 typedef struct hwb_registry {
   const hwb_benchmark_desc** entries;
   size_t count;
+  const hwb_alias_entry* aliases;
+  size_t alias_count;
 } hwb_registry;
 
 void hwb_registry_init(hwb_registry* registry, const hwb_benchmark_desc** entries, size_t count);
+void hwb_registry_set_aliases(hwb_registry* registry, const hwb_alias_entry* aliases, size_t alias_count);
 const hwb_benchmark_desc* hwb_registry_find(const hwb_registry* registry, const char* id);
 int hwb_run_benchmark(const hwb_context* ctx, const hwb_benchmark_desc* desc, hwb_benchmark_result* out);
 

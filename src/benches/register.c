@@ -28,6 +28,11 @@ extern const hwb_benchmark_desc hwb_bench_gpu_compute_fp32_vec_add;
 extern const hwb_benchmark_desc hwb_bench_gpu_compute_fp32_fma;
 extern const hwb_benchmark_desc hwb_bench_gpu_compute_i32_mad;
 
+static const hwb_alias_entry hwb_default_aliases[] = {
+  {"cpu.scalar.add", "cpu.scalar.int_add"},
+  {"storage.file.seq_write", "storage.seq_write"},
+};
+
 void hwb_register_default_benches(hwb_registry* registry) {
   static const hwb_benchmark_desc* entries[] = {
     &hwb_bench_cpu_scalar_int_add,
@@ -59,4 +64,5 @@ void hwb_register_default_benches(hwb_registry* registry) {
     &hwb_bench_gpu_compute_i32_mad,
   };
   hwb_registry_init(registry, entries, sizeof(entries) / sizeof(entries[0]));
+  hwb_registry_set_aliases(registry, hwb_default_aliases, sizeof(hwb_default_aliases) / sizeof(hwb_default_aliases[0]));
 }

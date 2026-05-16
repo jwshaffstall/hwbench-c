@@ -5,7 +5,7 @@
 
 ## Glossary
 
-Terms used throughout follow the project's LANGUAGE.md definitions:
+Terms used throughout are defined here for this document:
 
 - **Module** — anything with an interface and an implementation.
 - **Interface** — everything a caller must know: types, invariants, error modes, ordering, config.

@@ -23,9 +23,13 @@ if ($env:HWB_PRESET) {
   else { throw 'Unable to infer preset. Set HWB_PRESET.' }
 
   $preset = $basePreset
-  $suffix = if ($Config -eq 'Debug') { '-debug' } else { '-optimized' }
-  $build = Join-Path $root ("build/{0}{1}" -f $basePreset, $suffix)
-  $extraConfigure = @('-B', $build, "-DCMAKE_BUILD_TYPE=$Config")
+  if ($Config -eq 'Debug') {
+    $build = Join-Path $root ("build/{0}-debug" -f $basePreset)
+    $extraConfigure = @('-B', $build, "-DCMAKE_BUILD_TYPE=$Config")
+  } else {
+    $build = Join-Path $root ("build/{0}" -f $basePreset)
+    $extraConfigure = @()
+  }
 }
 
 Write-Host "==> Setup ($Config) — preset=$preset build=$build"

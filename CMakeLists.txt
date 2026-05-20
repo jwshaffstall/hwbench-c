@@ -111,7 +111,8 @@ if(OpenCL_FOUND)
   target_link_libraries(hwbench_benches PUBLIC OpenCL::OpenCL)
 endif()
 
-add_executable(hwbench-c apps/hwbench-cli/main.c)
+add_executable(hwbench-c apps/hwbench-cli/main.c apps/hwbench-cli/cli.c)
+target_include_directories(hwbench-c PRIVATE apps/hwbench-cli)
 target_link_libraries(hwbench-c PRIVATE hwbench_core hwbench_benches)
 
 if(HWB_BUILD_TESTS)

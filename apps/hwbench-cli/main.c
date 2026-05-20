@@ -31,19 +31,14 @@ static void print_result_row(const hwb_benchmark_result* r) {
          r->id, r->variant, r->threads, r->summary.median, r->unit, r->summary.cv);
 }
 
-static void print_hardware_report(void) {
-  hwb_hardware_info hw;
-  if (hwb_detect_hardware(&hw) != 0) {
-    return;
-  }
-
+static void print_hardware_report(const hwb_hardware_info* hw) {
   puts("HARDWARE");
-  printf("  CPU: %s\n", hw.cpu_model);
-  printf("  Cores: %d logical / %d physical\n", hw.logical_cores, hw.physical_cores);
-  printf("  Memory: %llu MB\n", hw.memory_total_mb);
-  printf("  Storage: %s (%llu GB total, %d devices)\n", hw.storage_name, hw.storage_total_gb, hw.storage_device_count);
-  printf("  Storage devices: %s\n", hw.storage_devices);
-  printf("  GPU: %s\n", hw.gpu_name);
+  printf("  CPU: %s\n", hw->cpu_model);
+  printf("  Cores: %d logical / %d physical\n", hw->logical_cores, hw->physical_cores);
+  printf("  Memory: %llu MB\n", hw->memory_total_mb);
+  printf("  Storage: %s (%llu GB total, %d devices)\n", hw->storage_name, hw->storage_total_gb, hw->storage_device_count);
+  printf("  Storage devices: %s\n", hw->storage_devices);
+  printf("  GPU: %s\n", hw->gpu_name);
 }
 
 int main(int argc, char** argv) {
@@ -146,6 +141,12 @@ int main(int argc, char** argv) {
     return 0;
   }
 
+  hwb_hardware_info hw;
+  if (hwb_detect_hardware(&hw) != 0) {
+    fprintf(stderr, "Failed to detect hardware\n");
+    return 1;
+  }
+
   if (run_stress && (bench_id || run_quick || run_cpu_suite || run_memory_suite || run_storage_suite || run_gpu_suite)) {
     print_usage();
     return 1;
@@ -170,7 +171,7 @@ int main(int argc, char** argv) {
     }
     result_count++;
     if (!printed_header) {
-      print_hardware_report();
+      print_hardware_report(&hw);
       print_result_header();
       printed_header = 1;
     }
@@ -207,7 +208,7 @@ int main(int argc, char** argv) {
     }
     result_count++;
     if (!printed_header) {
-      print_hardware_report();
+      print_hardware_report(&hw);
       print_result_header();
       printed_header = 1;
     }
@@ -225,7 +226,7 @@ int main(int argc, char** argv) {
       if (hwb_run_benchmark(&ctx, b, &results[result_count]) == 0) {
         result_count++;
         if (!printed_header) {
-          print_hardware_report();
+          print_hardware_report(&hw);
           print_result_header();
           printed_header = 1;
         }
@@ -239,11 +240,11 @@ int main(int argc, char** argv) {
   }
 
   if (!printed_header) {
-    print_hardware_report();
+    print_hardware_report(&hw);
     print_result_header();
   }
 
-  if (hwb_write_json_results(out_path, results, result_count, "0.1.0", "local-run") != 0) {
+  if (hwb_write_json_results(out_path, results, result_count, &hw, "0.1.0", "local-run") != 0) {
     fprintf(stderr, "Failed to write JSON output: %s\n", out_path);
     free(results);
     return 4;

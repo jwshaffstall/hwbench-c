@@ -1,33 +1,44 @@
 #include "hwbench/bench.h"
-#include "hwbench/stats.h"
 #include "hwbench/timer.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+typedef struct {
+  FILE* f;
+  unsigned char* buf;
+  size_t chunk_size;
+  size_t chunk_count;
+  double mib;
+} storage_seq_write_state;
+
 static bool storage_seq_write_supported(const hwb_context* ctx) {
   (void)ctx;
   return true;
 }
 
-static int run_one_pass(FILE* f, unsigned char* buf, size_t chunk_size, size_t chunk_count, double* mib_per_s) {
-  if (!f || !buf || !mib_per_s) return -1;
-  rewind(f);
+static int storage_seq_write_pass(void* user_data, double* out_value) {
+  storage_seq_write_state* st = (storage_seq_write_state*)user_data;
+  rewind(st->f);
 
   double t0 = hwb_now_seconds();
-  for (size_t i = 0; i < chunk_count; ++i) {
-    if (fwrite(buf, 1, chunk_size, f) != chunk_size) {
+  for (size_t i = 0; i < st->chunk_count; ++i) {
+    if (fwrite(st->buf, 1, st->chunk_size, st->f) != st->chunk_size) {
       return -1;
     }
   }
-  if (fflush(f) != 0) {
+  if (fflush(st->f) != 0) {
     return -1;
   }
   double t1 = hwb_now_seconds();
-  double mib = (double)(chunk_size * chunk_count) / (1024.0 * 1024.0);
-  *mib_per_s = mib / (t1 - t0);
+  *out_value = st->mib / (t1 - t0);
   return 0;
+}
+
+static int storage_seq_write_warmup(void* user_data) {
+  double ignored;
+  return storage_seq_write_pass(user_data, &ignored);
 }
 
 static int storage_seq_write_run(const hwb_context* ctx, hwb_benchmark_result* out) {
@@ -54,32 +65,13 @@ static int storage_seq_write_run(const hwb_context* ctx, hwb_benchmark_result* o
     return -1;
   }
 
-  double warmup_start = hwb_now_seconds();
-  while ((hwb_now_seconds() - warmup_start) * 1000.0 < (double)ctx->warmup_ms) {
-    double ignored = 0.0;
-    if (run_one_pass(f, buf, chunk_size, chunk_count, &ignored) != 0) {
-      fclose(f);
-      free(buf);
-      return -1;
-    }
-  }
-  out->warmup_ms = (hwb_now_seconds() - warmup_start) * 1000.0;
-
-  double measured_start = hwb_now_seconds();
-  for (int s = 0; s < ctx->samples && s < HWB_MAX_SAMPLES; ++s) {
-    double mib_per_s = 0.0;
-    if (run_one_pass(f, buf, chunk_size, chunk_count, &mib_per_s) != 0) {
-      fclose(f);
-      free(buf);
-      return -1;
-    }
-    out->samples[out->sample_count++] = mib_per_s;
-  }
-  out->measured_ms = (hwb_now_seconds() - measured_start) * 1000.0;
+  double mib = (double)(chunk_size * chunk_count) / (1024.0 * 1024.0);
+  storage_seq_write_state st = {.f = f, .buf = buf, .chunk_size = chunk_size, .chunk_count = chunk_count, .mib = mib};
+  int rc = hwb_run_samples(ctx, storage_seq_write_warmup, storage_seq_write_pass, &st, out);
 
   fclose(f);
   free(buf);
-  return hwb_compute_stats(out->samples, out->sample_count, &out->summary);
+  return rc;
 }
 
 const hwb_benchmark_desc hwb_bench_storage_seq_write = {

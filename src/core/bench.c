@@ -1,4 +1,6 @@
 #include "hwbench/bench.h"
+#include "hwbench/stats.h"
+#include "hwbench/timer.h"
 
 #include <string.h>
 
@@ -36,4 +38,34 @@ int hwb_run_benchmark(const hwb_context* ctx, const hwb_benchmark_desc* desc, hw
     return -2;
   }
   return desc->run(ctx, out);
+}
+
+int hwb_run_samples(const hwb_context* ctx,
+                    hwb_bench_warmup_pass_fn warmup_pass,
+                    hwb_bench_sample_pass_fn sample_pass,
+                    void* user_data,
+                    hwb_benchmark_result* out) {
+  if (!ctx || !sample_pass || !out) {
+    return -1;
+  }
+
+  double warmup_start = hwb_now_seconds();
+  while ((hwb_now_seconds() - warmup_start) * 1000.0 < (double)ctx->warmup_ms) {
+    if (warmup_pass && warmup_pass(user_data) != 0) {
+      return -1;
+    }
+  }
+  out->warmup_ms = (hwb_now_seconds() - warmup_start) * 1000.0;
+
+  double measured_start = hwb_now_seconds();
+  for (int s = 0; s < ctx->samples && s < HWB_MAX_SAMPLES; ++s) {
+    double value;
+    if (sample_pass(user_data, &value) != 0) {
+      return -1;
+    }
+    out->samples[out->sample_count++] = value;
+  }
+  out->measured_ms = (hwb_now_seconds() - measured_start) * 1000.0;
+
+  return hwb_compute_stats(out->samples, out->sample_count, &out->summary);
 }

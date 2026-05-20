@@ -1,13 +1,38 @@
 #include "hwbench/bench.h"
-#include "hwbench/stats.h"
 #include "hwbench/timer.h"
 
 #include <stdlib.h>
 #include <string.h>
 
+typedef struct {
+  double* a;
+  double* b;
+  size_t n;
+  double bytes;
+} stream_copy_state;
+
 static bool memory_stream_copy_supported(const hwb_context* ctx) {
   (void)ctx;
   return true;
+}
+
+static int stream_copy_warmup(void* user_data) {
+  stream_copy_state* st = (stream_copy_state*)user_data;
+  for (size_t i = 0; i < st->n; ++i) {
+    st->b[i] = st->a[i];
+  }
+  return 0;
+}
+
+static int stream_copy_sample(void* user_data, double* out_value) {
+  stream_copy_state* st = (stream_copy_state*)user_data;
+  double t0 = hwb_now_seconds();
+  for (size_t i = 0; i < st->n; ++i) {
+    st->b[i] = st->a[i];
+  }
+  double t1 = hwb_now_seconds();
+  *out_value = (st->bytes / (t1 - t0)) / 1e9;
+  return 0;
 }
 
 static int memory_stream_copy_run(const hwb_context* ctx, hwb_benchmark_result* out) {
@@ -34,28 +59,9 @@ static int memory_stream_copy_run(const hwb_context* ctx, hwb_benchmark_result* 
     b[i] = 0.0;
   }
 
-  double warmup_start = hwb_now_seconds();
-  while ((hwb_now_seconds() - warmup_start) * 1000.0 < (double)ctx->warmup_ms) {
-    for (size_t i = 0; i < n; ++i) {
-      b[i] = a[i];
-    }
-  }
-  out->warmup_ms = (hwb_now_seconds() - warmup_start) * 1000.0;
+  stream_copy_state st = {.a = a, .b = b, .n = n, .bytes = (double)(2 * sizeof(double) * n)};
+  int rc = hwb_run_samples(ctx, stream_copy_warmup, stream_copy_sample, &st, out);
 
-  double measured_start = hwb_now_seconds();
-  for (int s = 0; s < ctx->samples && s < HWB_MAX_SAMPLES; ++s) {
-    double t0 = hwb_now_seconds();
-    for (size_t i = 0; i < n; ++i) {
-      b[i] = a[i];
-    }
-    double t1 = hwb_now_seconds();
-
-    const double bytes = (double)(2 * sizeof(double) * n);
-    out->samples[out->sample_count++] = (bytes / (t1 - t0)) / 1e9;
-  }
-  out->measured_ms = (hwb_now_seconds() - measured_start) * 1000.0;
-
-  /* Prevent dead-code elimination of the copy loops by making b observable. */
   volatile double sink = 0.0;
   for (size_t i = 0; i < n; ++i) {
     sink += b[i];
@@ -64,7 +70,7 @@ static int memory_stream_copy_run(const hwb_context* ctx, hwb_benchmark_result* 
 
   free(a);
   free(b);
-  return hwb_compute_stats(out->samples, out->sample_count, &out->summary);
+  return rc;
 }
 
 const hwb_benchmark_desc hwb_bench_memory_stream_copy = {

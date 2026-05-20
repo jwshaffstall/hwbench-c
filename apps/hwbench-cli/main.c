@@ -23,11 +23,11 @@ static void print_usage(void) {
 
 
 static void print_result_header(void) {
-  puts("BENCHMARK	VARIANT	THREADS	MEDIAN	UNIT	CV%");
+  puts("BENCHMARK\tVARIANT\tTHREADS\tMEDIAN\tUNIT\tCV%");
 }
 
 static void print_result_row(const hwb_benchmark_result* r) {
-  printf("%s	%s	%d	%.3f	%s	%.2f\n",
+  printf("%s\t%s\t%d\t%.3f\t%s\t%.2f\n",
          r->id, r->variant, r->threads, r->summary.median, r->unit, r->summary.cv);
 }
 

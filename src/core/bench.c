@@ -7,6 +7,13 @@
 void hwb_registry_init(hwb_registry* registry, const hwb_benchmark_desc** entries, size_t count) {
   registry->entries = entries;
   registry->count = count;
+  registry->aliases = NULL;
+  registry->alias_count = 0;
+}
+
+void hwb_registry_set_aliases(hwb_registry* registry, const hwb_alias_entry* aliases, size_t alias_count) {
+  registry->aliases = aliases;
+  registry->alias_count = alias_count;
 }
 
 const hwb_benchmark_desc* hwb_registry_find(const hwb_registry* registry, const char* id) {
@@ -14,16 +21,21 @@ const hwb_benchmark_desc* hwb_registry_find(const hwb_registry* registry, const 
     return NULL;
   }
 
-  const char* canonical_id = id;
-  if (strcmp(id, "cpu.scalar.add") == 0) {
-    canonical_id = "cpu.scalar.int_add";
-  } else if (strcmp(id, "storage.file.seq_write") == 0) {
-    canonical_id = "storage.seq_write";
+  for (size_t i = 0; i < registry->count; ++i) {
+    if (strcmp(registry->entries[i]->id, id) == 0) {
+      return registry->entries[i];
+    }
   }
 
-  for (size_t i = 0; i < registry->count; ++i) {
-    if (strcmp(registry->entries[i]->id, canonical_id) == 0) {
-      return registry->entries[i];
+  for (size_t i = 0; i < registry->alias_count; ++i) {
+    if (strcmp(registry->aliases[i].alias, id) == 0) {
+      const char* canonical = registry->aliases[i].canonical_id;
+      for (size_t j = 0; j < registry->count; ++j) {
+        if (strcmp(registry->entries[j]->id, canonical) == 0) {
+          return registry->entries[j];
+        }
+      }
+      return NULL;
     }
   }
 

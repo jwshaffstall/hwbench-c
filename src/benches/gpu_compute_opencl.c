@@ -136,24 +136,163 @@ static bool gpu_compute_supported(const hwb_context* ctx) {
   return false;
 }
 
+typedef struct {
+  void* a;
+  void* b;
+  void* c;
+  cl_mem buf_a;
+  cl_mem buf_b;
+  cl_mem buf_c;
+  cl_mem buf_out;
+  cl_kernel kernel;
+  size_t elem_count;
+  int elem_size;
+  int input_count;
+} hwb_opencl_buffers;
+
+static void hwb_opencl_cleanup(hwb_opencl_buffers* bufs) {
+  if (bufs->kernel) clReleaseKernel(bufs->kernel);
+  if (bufs->buf_out) clReleaseMemObject(bufs->buf_out);
+  if (bufs->buf_c) clReleaseMemObject(bufs->buf_c);
+  if (bufs->buf_b) clReleaseMemObject(bufs->buf_b);
+  if (bufs->buf_a) clReleaseMemObject(bufs->buf_a);
+  free(bufs->c);
+  free(bufs->b);
+  free(bufs->a);
+}
+
+static int hwb_opencl_setup_buffers(hwb_opencl_env* env,
+                                    hwb_opencl_buffers* bufs,
+                                    const char* kernel_name,
+                                    size_t elem_count,
+                                    int elem_size,
+                                    int input_count,
+                                    void (*fill_fn)(void* a, void* b, void* c, size_t n)) {
+  cl_int err = CL_SUCCESS;
+  memset(bufs, 0, sizeof(*bufs));
+  bufs->elem_count = elem_count;
+  bufs->elem_size = elem_size;
+  bufs->input_count = input_count;
+
+  bufs->a = malloc(elem_count * (size_t)elem_size);
+  bufs->b = malloc(elem_count * (size_t)elem_size);
+  if (input_count >= 3) {
+    bufs->c = malloc(elem_count * (size_t)elem_size);
+  }
+  if (!bufs->a || !bufs->b || (input_count >= 3 && !bufs->c)) {
+    return -1;
+  }
+
+  fill_fn(bufs->a, bufs->b, bufs->c, elem_count);
+
+  bufs->buf_a = clCreateBuffer(env->context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+                               elem_count * (size_t)elem_size, bufs->a, &err);
+  if (!bufs->buf_a || err != CL_SUCCESS) return -1;
+  bufs->buf_b = clCreateBuffer(env->context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+                               elem_count * (size_t)elem_size, bufs->b, &err);
+  if (!bufs->buf_b || err != CL_SUCCESS) return -1;
+  if (input_count >= 3) {
+    bufs->buf_c = clCreateBuffer(env->context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+                                 elem_count * (size_t)elem_size, bufs->c, &err);
+    if (!bufs->buf_c || err != CL_SUCCESS) return -1;
+  }
+  bufs->buf_out = clCreateBuffer(env->context, CL_MEM_WRITE_ONLY,
+                                 elem_count * (size_t)elem_size, NULL, &err);
+  if (!bufs->buf_out || err != CL_SUCCESS) return -1;
+
+  bufs->kernel = clCreateKernel(env->program, kernel_name, &err);
+  if (!bufs->kernel || err != CL_SUCCESS) return -1;
+
+  int arg_idx = 0;
+  err = clSetKernelArg(bufs->kernel, arg_idx++, sizeof(cl_mem), &bufs->buf_a);
+  if (err != CL_SUCCESS) return -1;
+  err = clSetKernelArg(bufs->kernel, arg_idx++, sizeof(cl_mem), &bufs->buf_b);
+  if (err != CL_SUCCESS) return -1;
+  if (input_count >= 3) {
+    err = clSetKernelArg(bufs->kernel, arg_idx++, sizeof(cl_mem), &bufs->buf_c);
+    if (err != CL_SUCCESS) return -1;
+  }
+  err = clSetKernelArg(bufs->kernel, arg_idx++, sizeof(cl_mem), &bufs->buf_out);
+  if (err != CL_SUCCESS) return -1;
+
+  return 0;
+}
+
+static int hwb_opencl_run_sampled(hwb_opencl_env* env,
+                                  hwb_opencl_buffers* bufs,
+                                  const hwb_context* ctx,
+                                  hwb_benchmark_result* out,
+                                  double flops_per_elem) {
+  cl_int err = CL_SUCCESS;
+  size_t global = bufs->elem_count;
+
+  double warmup_start = hwb_now_seconds();
+  while ((hwb_now_seconds() - warmup_start) * 1000.0 < (double)ctx->warmup_ms) {
+    err = clEnqueueNDRangeKernel(env->queue, bufs->kernel, 1, NULL, &global, NULL, 0, NULL, NULL);
+    if (err != CL_SUCCESS) return -1;
+    err = clFinish(env->queue);
+    if (err != CL_SUCCESS) return -1;
+  }
+  out->warmup_ms = (hwb_now_seconds() - warmup_start) * 1000.0;
+
+  double measured_start = hwb_now_seconds();
+  for (int s = 0; s < ctx->samples && s < HWB_MAX_SAMPLES; ++s) {
+    double t0 = hwb_now_seconds();
+    err = clEnqueueNDRangeKernel(env->queue, bufs->kernel, 1, NULL, &global, NULL, 0, NULL, NULL);
+    if (err != CL_SUCCESS) return -1;
+    err = clFinish(env->queue);
+    if (err != CL_SUCCESS) return -1;
+    double t1 = hwb_now_seconds();
+    out->samples[out->sample_count++] = ((double)bufs->elem_count * flops_per_elem) / (t1 - t0) / 1e9;
+  }
+  out->measured_ms = (hwb_now_seconds() - measured_start) * 1000.0;
+
+  return hwb_compute_stats(out->samples, out->sample_count, &out->summary);
+}
+
+static void fill_float_2in(void* a, void* b, void* c, size_t n) {
+  float* fa = (float*)a;
+  float* fb = (float*)b;
+  (void)c;
+  for (size_t i = 0; i < n; ++i) {
+    fa[i] = (float)(i % 1024) * 0.001f;
+    fb[i] = (float)(i % 251) * 0.002f;
+  }
+}
+
+static void fill_float_3in(void* a, void* b, void* c, size_t n) {
+  float* fa = (float*)a;
+  float* fb = (float*)b;
+  float* fc = (float*)c;
+  for (size_t i = 0; i < n; ++i) {
+    fa[i] = (float)(i % 1024) * 0.001f;
+    fb[i] = (float)(i % 251) * 0.002f;
+    fc[i] = (float)(i % 127) * 0.003f;
+  }
+}
+
+static void fill_int_3in(void* a, void* b, void* c, size_t n) {
+  int* ia = (int*)a;
+  int* ib = (int*)b;
+  int* ic = (int*)c;
+  for (size_t i = 0; i < n; ++i) {
+    ia[i] = (int)(i % 65521);
+    ib[i] = (int)((i + 17) % 32749);
+    ic[i] = (int)(i % 8191);
+  }
+}
+
 static int run_float_kernel(const hwb_context* ctx,
                             hwb_benchmark_result* out,
                             const char* id,
                             const char* variant,
                             const char* kernel_name,
-                            bool use_c_input,
-                            double flops_per_elem) {
+                            int input_count,
+                            double flops_per_elem,
+                            void (*fill_fn)(void*, void*, void*, size_t)) {
   hwb_opencl_env env;
-  cl_int err = CL_SUCCESS;
-  cl_mem buf_a = NULL;
-  cl_mem buf_b = NULL;
-  cl_mem buf_c = NULL;
-  cl_mem buf_out = NULL;
-  cl_kernel kernel = NULL;
-  float* a = NULL;
-  float* b = NULL;
-  float* c = NULL;
-  int rc = -1;
+  hwb_opencl_buffers bufs;
+  int rc;
 
   memset(out, 0, sizeof(*out));
   out->id = id;
@@ -168,90 +307,16 @@ static int run_float_kernel(const hwb_context* ctx,
     return -2;
   }
 
-  a = (float*)malloc(HWB_GPU_ELEMS * sizeof(float));
-  b = (float*)malloc(HWB_GPU_ELEMS * sizeof(float));
-  if (use_c_input) {
-    c = (float*)malloc(HWB_GPU_ELEMS * sizeof(float));
-  }
-  if (!a || !b || (use_c_input && !c)) {
-    rc = -1;
-    goto cleanup;
+  if (hwb_opencl_setup_buffers(&env, &bufs, kernel_name, HWB_GPU_ELEMS,
+                               (int)sizeof(float), input_count, fill_fn) != 0) {
+    hwb_opencl_shutdown(&env);
+    return -1;
   }
 
-  for (size_t i = 0; i < HWB_GPU_ELEMS; ++i) {
-    a[i] = (float)(i % 1024) * 0.001f;
-    b[i] = (float)(i % 251) * 0.002f;
-    if (use_c_input) {
-      c[i] = (float)(i % 127) * 0.003f;
-    }
-  }
+  rc = hwb_opencl_run_sampled(&env, &bufs, ctx, out, flops_per_elem);
 
-  buf_a = clCreateBuffer(env.context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
-                         HWB_GPU_ELEMS * sizeof(float), a, &err);
-  if (!buf_a || err != CL_SUCCESS) goto cleanup;
-  buf_b = clCreateBuffer(env.context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
-                         HWB_GPU_ELEMS * sizeof(float), b, &err);
-  if (!buf_b || err != CL_SUCCESS) goto cleanup;
-  if (use_c_input) {
-    buf_c = clCreateBuffer(env.context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
-                           HWB_GPU_ELEMS * sizeof(float), c, &err);
-    if (!buf_c || err != CL_SUCCESS) goto cleanup;
-  }
-  buf_out = clCreateBuffer(env.context, CL_MEM_WRITE_ONLY,
-                           HWB_GPU_ELEMS * sizeof(float), NULL, &err);
-  if (!buf_out || err != CL_SUCCESS) goto cleanup;
-
-  kernel = clCreateKernel(env.program, kernel_name, &err);
-  if (!kernel || err != CL_SUCCESS) goto cleanup;
-
-  unsigned arg_index = 0;
-  err = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), &buf_a);
-  if (err != CL_SUCCESS) goto cleanup;
-  err = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), &buf_b);
-  if (err != CL_SUCCESS) goto cleanup;
-  if (use_c_input) {
-    err = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), &buf_c);
-    if (err != CL_SUCCESS) goto cleanup;
-  }
-  err = clSetKernelArg(kernel, arg_index++, sizeof(cl_mem), &buf_out);
-  if (err != CL_SUCCESS) goto cleanup;
-
-  size_t global = HWB_GPU_ELEMS;
-
-  double warmup_start = hwb_now_seconds();
-  while ((hwb_now_seconds() - warmup_start) * 1000.0 < (double)ctx->warmup_ms) {
-    err = clEnqueueNDRangeKernel(env.queue, kernel, 1, NULL, &global, NULL, 0, NULL, NULL);
-    if (err != CL_SUCCESS) goto cleanup;
-    err = clFinish(env.queue);
-    if (err != CL_SUCCESS) goto cleanup;
-  }
-  out->warmup_ms = (hwb_now_seconds() - warmup_start) * 1000.0;
-
-  double measured_start = hwb_now_seconds();
-  for (int s = 0; s < ctx->samples && s < HWB_MAX_SAMPLES; ++s) {
-    double t0 = hwb_now_seconds();
-    err = clEnqueueNDRangeKernel(env.queue, kernel, 1, NULL, &global, NULL, 0, NULL, NULL);
-    if (err != CL_SUCCESS) goto cleanup;
-    err = clFinish(env.queue);
-    if (err != CL_SUCCESS) goto cleanup;
-    double t1 = hwb_now_seconds();
-    out->samples[out->sample_count++] = ((double)HWB_GPU_ELEMS * flops_per_elem) / (t1 - t0) / 1e9;
-  }
-  out->measured_ms = (hwb_now_seconds() - measured_start) * 1000.0;
-
-  rc = hwb_compute_stats(out->samples, out->sample_count, &out->summary);
-
-cleanup:
-  if (kernel) clReleaseKernel(kernel);
-  if (buf_out) clReleaseMemObject(buf_out);
-  if (buf_c) clReleaseMemObject(buf_c);
-  if (buf_b) clReleaseMemObject(buf_b);
-  if (buf_a) clReleaseMemObject(buf_a);
-  free(c);
-  free(b);
-  free(a);
+  hwb_opencl_cleanup(&bufs);
   hwb_opencl_shutdown(&env);
-
   return rc;
 }
 
@@ -260,8 +325,9 @@ static int gpu_vec_add_run(const hwb_context* ctx, hwb_benchmark_result* out) {
                           "gpu.compute.fp32_vec_add",
                           "opencl",
                           "vec_add",
-                          false,
-                          1.0);
+                          2,
+                          1.0,
+                          fill_float_2in);
 }
 
 static int gpu_fma_run(const hwb_context* ctx, hwb_benchmark_result* out) {
@@ -269,22 +335,15 @@ static int gpu_fma_run(const hwb_context* ctx, hwb_benchmark_result* out) {
                           "gpu.compute.fp32_fma",
                           "opencl",
                           "fma3",
-                          true,
-                          2.0);
+                          3,
+                          2.0,
+                          fill_float_3in);
 }
 
 static int gpu_int_mad_run(const hwb_context* ctx, hwb_benchmark_result* out) {
   hwb_opencl_env env;
-  cl_int err = CL_SUCCESS;
-  cl_mem buf_a = NULL;
-  cl_mem buf_b = NULL;
-  cl_mem buf_c = NULL;
-  cl_mem buf_out = NULL;
-  cl_kernel kernel = NULL;
-  int* a = NULL;
-  int* b = NULL;
-  int* c = NULL;
-  int rc = -1;
+  hwb_opencl_buffers bufs;
+  int rc;
 
   memset(out, 0, sizeof(*out));
   out->id = "gpu.compute.i32_mad";
@@ -299,76 +358,15 @@ static int gpu_int_mad_run(const hwb_context* ctx, hwb_benchmark_result* out) {
     return -2;
   }
 
-  a = (int*)malloc(HWB_GPU_ELEMS * sizeof(int));
-  b = (int*)malloc(HWB_GPU_ELEMS * sizeof(int));
-  c = (int*)malloc(HWB_GPU_ELEMS * sizeof(int));
-  if (!a || !b || !c) goto cleanup;
-
-  for (size_t i = 0; i < HWB_GPU_ELEMS; ++i) {
-    a[i] = (int)(i % 65521);
-    b[i] = (int)((i + 17) % 32749);
-    c[i] = (int)(i % 8191);
+  if (hwb_opencl_setup_buffers(&env, &bufs, "int_mad", HWB_GPU_ELEMS,
+                               (int)sizeof(int), 3, fill_int_3in) != 0) {
+    hwb_opencl_shutdown(&env);
+    return -1;
   }
 
-  buf_a = clCreateBuffer(env.context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
-                         HWB_GPU_ELEMS * sizeof(int), a, &err);
-  if (!buf_a || err != CL_SUCCESS) goto cleanup;
-  buf_b = clCreateBuffer(env.context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
-                         HWB_GPU_ELEMS * sizeof(int), b, &err);
-  if (!buf_b || err != CL_SUCCESS) goto cleanup;
-  buf_c = clCreateBuffer(env.context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
-                         HWB_GPU_ELEMS * sizeof(int), c, &err);
-  if (!buf_c || err != CL_SUCCESS) goto cleanup;
-  buf_out = clCreateBuffer(env.context, CL_MEM_WRITE_ONLY,
-                           HWB_GPU_ELEMS * sizeof(int), NULL, &err);
-  if (!buf_out || err != CL_SUCCESS) goto cleanup;
+  rc = hwb_opencl_run_sampled(&env, &bufs, ctx, out, 2.0);
 
-  kernel = clCreateKernel(env.program, "int_mad", &err);
-  if (!kernel || err != CL_SUCCESS) goto cleanup;
-
-  err = clSetKernelArg(kernel, 0, sizeof(cl_mem), &buf_a);
-  if (err != CL_SUCCESS) goto cleanup;
-  err = clSetKernelArg(kernel, 1, sizeof(cl_mem), &buf_b);
-  if (err != CL_SUCCESS) goto cleanup;
-  err = clSetKernelArg(kernel, 2, sizeof(cl_mem), &buf_c);
-  if (err != CL_SUCCESS) goto cleanup;
-  err = clSetKernelArg(kernel, 3, sizeof(cl_mem), &buf_out);
-  if (err != CL_SUCCESS) goto cleanup;
-
-  size_t global = HWB_GPU_ELEMS;
-
-  double warmup_start = hwb_now_seconds();
-  while ((hwb_now_seconds() - warmup_start) * 1000.0 < (double)ctx->warmup_ms) {
-    err = clEnqueueNDRangeKernel(env.queue, kernel, 1, NULL, &global, NULL, 0, NULL, NULL);
-    if (err != CL_SUCCESS) goto cleanup;
-    err = clFinish(env.queue);
-    if (err != CL_SUCCESS) goto cleanup;
-  }
-  out->warmup_ms = (hwb_now_seconds() - warmup_start) * 1000.0;
-
-  double measured_start = hwb_now_seconds();
-  for (int s = 0; s < ctx->samples && s < HWB_MAX_SAMPLES; ++s) {
-    double t0 = hwb_now_seconds();
-    err = clEnqueueNDRangeKernel(env.queue, kernel, 1, NULL, &global, NULL, 0, NULL, NULL);
-    if (err != CL_SUCCESS) goto cleanup;
-    err = clFinish(env.queue);
-    if (err != CL_SUCCESS) goto cleanup;
-    double t1 = hwb_now_seconds();
-    out->samples[out->sample_count++] = ((double)HWB_GPU_ELEMS * 2.0) / (t1 - t0) / 1e9;
-  }
-  out->measured_ms = (hwb_now_seconds() - measured_start) * 1000.0;
-
-  rc = hwb_compute_stats(out->samples, out->sample_count, &out->summary);
-
-cleanup:
-  if (kernel) clReleaseKernel(kernel);
-  if (buf_out) clReleaseMemObject(buf_out);
-  if (buf_c) clReleaseMemObject(buf_c);
-  if (buf_b) clReleaseMemObject(buf_b);
-  if (buf_a) clReleaseMemObject(buf_a);
-  free(c);
-  free(b);
-  free(a);
+  hwb_opencl_cleanup(&bufs);
   hwb_opencl_shutdown(&env);
   return rc;
 }
@@ -384,15 +382,7 @@ int hwb_run_gpu_stress(int seconds, hwb_benchmark_result* out) {
   }
 
   hwb_opencl_env env;
-  cl_int err = CL_SUCCESS;
-  cl_mem buf_a = NULL;
-  cl_mem buf_b = NULL;
-  cl_mem buf_c = NULL;
-  cl_mem buf_out = NULL;
-  cl_kernel kernel = NULL;
-  float* a = NULL;
-  float* b = NULL;
-  float* c = NULL;
+  hwb_opencl_buffers bufs;
   int rc = -1;
 
   memset(out, 0, sizeof(*out));
@@ -408,53 +398,24 @@ int hwb_run_gpu_stress(int seconds, hwb_benchmark_result* out) {
     return -2;
   }
 
-  a = (float*)malloc(HWB_GPU_STRESS_ELEMS * sizeof(float));
-  b = (float*)malloc(HWB_GPU_STRESS_ELEMS * sizeof(float));
-  c = (float*)malloc(HWB_GPU_STRESS_ELEMS * sizeof(float));
-  if (!a || !b || !c) goto cleanup;
-
-  for (size_t i = 0; i < HWB_GPU_STRESS_ELEMS; ++i) {
-    a[i] = (float)(i % 1024) * 0.001f;
-    b[i] = (float)(i % 251) * 0.002f;
-    c[i] = (float)(i % 127) * 0.003f;
+  if (hwb_opencl_setup_buffers(&env, &bufs, "fma3", HWB_GPU_STRESS_ELEMS,
+                               (int)sizeof(float), 3, fill_float_3in) != 0) {
+    hwb_opencl_shutdown(&env);
+    return -1;
   }
 
-  buf_a = clCreateBuffer(env.context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
-                         HWB_GPU_STRESS_ELEMS * sizeof(float), a, &err);
-  if (!buf_a || err != CL_SUCCESS) goto cleanup;
-  buf_b = clCreateBuffer(env.context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
-                         HWB_GPU_STRESS_ELEMS * sizeof(float), b, &err);
-  if (!buf_b || err != CL_SUCCESS) goto cleanup;
-  buf_c = clCreateBuffer(env.context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
-                         HWB_GPU_STRESS_ELEMS * sizeof(float), c, &err);
-  if (!buf_c || err != CL_SUCCESS) goto cleanup;
-  buf_out = clCreateBuffer(env.context, CL_MEM_WRITE_ONLY,
-                           HWB_GPU_STRESS_ELEMS * sizeof(float), NULL, &err);
-  if (!buf_out || err != CL_SUCCESS) goto cleanup;
-
-  kernel = clCreateKernel(env.program, "fma3", &err);
-  if (!kernel || err != CL_SUCCESS) goto cleanup;
-
-  err = clSetKernelArg(kernel, 0, sizeof(cl_mem), &buf_a);
-  if (err != CL_SUCCESS) goto cleanup;
-  err = clSetKernelArg(kernel, 1, sizeof(cl_mem), &buf_b);
-  if (err != CL_SUCCESS) goto cleanup;
-  err = clSetKernelArg(kernel, 2, sizeof(cl_mem), &buf_c);
-  if (err != CL_SUCCESS) goto cleanup;
-  err = clSetKernelArg(kernel, 3, sizeof(cl_mem), &buf_out);
-  if (err != CL_SUCCESS) goto cleanup;
-
-  size_t global = HWB_GPU_STRESS_ELEMS;
+  cl_int err = CL_SUCCESS;
+  size_t global = bufs.elem_count;
   double start = hwb_now_seconds();
   double end_time = start + (double)duration;
   double flops_accum = 0.0;
 
   while (hwb_now_seconds() < end_time) {
-    err = clEnqueueNDRangeKernel(env.queue, kernel, 1, NULL, &global, NULL, 0, NULL, NULL);
+    err = clEnqueueNDRangeKernel(env.queue, bufs.kernel, 1, NULL, &global, NULL, 0, NULL, NULL);
     if (err != CL_SUCCESS) goto cleanup;
     err = clFinish(env.queue);
     if (err != CL_SUCCESS) goto cleanup;
-    flops_accum += ((double)HWB_GPU_STRESS_ELEMS * 2.0);
+    flops_accum += ((double)bufs.elem_count * 2.0);
 #if defined(_WIN32)
     SwitchToThread();
 #else
@@ -472,14 +433,7 @@ int hwb_run_gpu_stress(int seconds, hwb_benchmark_result* out) {
   rc = hwb_compute_stats(out->samples, out->sample_count, &out->summary);
 
 cleanup:
-  if (kernel) clReleaseKernel(kernel);
-  if (buf_out) clReleaseMemObject(buf_out);
-  if (buf_c) clReleaseMemObject(buf_c);
-  if (buf_b) clReleaseMemObject(buf_b);
-  if (buf_a) clReleaseMemObject(buf_a);
-  free(c);
-  free(b);
-  free(a);
+  hwb_opencl_cleanup(&bufs);
   hwb_opencl_shutdown(&env);
   return rc;
 }

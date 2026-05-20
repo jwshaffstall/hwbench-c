@@ -1,5 +1,4 @@
 #include "hwbench/json.h"
-#include "hwbench/system.h"
 
 #include <stdio.h>
 #include <time.h>
@@ -39,6 +38,7 @@ static void write_json_string(FILE* f, const char* s) {
 int hwb_write_json_results(const char* path,
                            const hwb_benchmark_result* results,
                            size_t result_count,
+                           const hwb_hardware_info* hw,
                            const char* suite_version,
                            const char* run_id) {
   FILE* f = fopen(path, "w");
@@ -61,20 +61,18 @@ int hwb_write_json_results(const char* path,
   fprintf(f, "  \"suite_version\": "); write_json_string(f, suite_version); fprintf(f, ",\n");
   fprintf(f, "  \"run_id\": "); write_json_string(f, run_id); fprintf(f, ",\n");
   fprintf(f, "  \"timestamp_utc\": \"%s\",\n", ts);
-  hwb_hardware_info hw;
-  hwb_detect_hardware(&hw);
 
   fprintf(f, "  \"machine\": {\n");
   fprintf(f, "    \"arch\": "); write_json_string(f, hwb_arch_name()); fprintf(f, ",\n");
-  fprintf(f, "    \"cpu_model\": "); write_json_string(f, hw.cpu_model); fprintf(f, ",\n");
-  fprintf(f, "    \"logical_cores\": %d,\n", hw.logical_cores);
-  fprintf(f, "    \"physical_cores\": %d,\n", hw.physical_cores);
-  fprintf(f, "    \"memory_total_mb\": %llu,\n", hw.memory_total_mb);
-  fprintf(f, "    \"storage_total_gb\": %llu,\n", hw.storage_total_gb);
-  fprintf(f, "    \"storage_name\": "); write_json_string(f, hw.storage_name); fprintf(f, ",\n");
-  fprintf(f, "    \"storage_device_count\": %d,\n", hw.storage_device_count);
-  fprintf(f, "    \"storage_devices\": "); write_json_string(f, hw.storage_devices); fprintf(f, ",\n");
-  fprintf(f, "    \"gpu_name\": "); write_json_string(f, hw.gpu_name); fprintf(f, "\n");
+  fprintf(f, "    \"cpu_model\": "); write_json_string(f, hw->cpu_model); fprintf(f, ",\n");
+  fprintf(f, "    \"logical_cores\": %d,\n", hw->logical_cores);
+  fprintf(f, "    \"physical_cores\": %d,\n", hw->physical_cores);
+  fprintf(f, "    \"memory_total_mb\": %llu,\n", hw->memory_total_mb);
+  fprintf(f, "    \"storage_total_gb\": %llu,\n", hw->storage_total_gb);
+  fprintf(f, "    \"storage_name\": "); write_json_string(f, hw->storage_name); fprintf(f, ",\n");
+  fprintf(f, "    \"storage_device_count\": %d,\n", hw->storage_device_count);
+  fprintf(f, "    \"storage_devices\": "); write_json_string(f, hw->storage_devices); fprintf(f, ",\n");
+  fprintf(f, "    \"gpu_name\": "); write_json_string(f, hw->gpu_name); fprintf(f, "\n");
   fprintf(f, "  },\n");
   fprintf(f, "  \"os\": {\"name\": "); write_json_string(f, hwb_os_name()); fprintf(f, "},\n");
   fprintf(f, "  \"benchmarks\": [\n");
